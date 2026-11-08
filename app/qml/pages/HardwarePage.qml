@@ -40,7 +40,7 @@ Page {
                 Column { Layout.fillWidth: true; spacing: 2
                     Label { text: "Hi-Res Audio"; role: "headlineS"; emphasized: true }
                     Label { width: parent.width; wrapMode: Text.WordWrap; role: "body"; color: Theme.inkVariant
-                            text: audio.hiRes ? "PipeWire follows each song's native rate — 44.1, 96, 192 kHz… no resampling to 48 kHz."
+                            text: audio.hiRes ? "PipeWire follows each song's native rate (44.1, 96, 192 kHz) with no resampling to 48 kHz."
                                               : "Off: every stream is resampled to " + page.fmtRate(+(audio.clock.rate || 48000)) + ". Turn on to play files at their native rate." } }
                 M3Switch { checked: audio.hiRes; onToggled: (v) => audio.setHiRes(v) }
             }

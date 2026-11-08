@@ -74,7 +74,7 @@ Page {
 
     EffectCard {
         width: parent.width
-        title: "Intelligent EQ"; subtitle: "Listens to what's playing and steers the tonal balance — song by song, scene by scene"
+        title: "Intelligent EQ"; subtitle: "Listens to what's playing and steers the tonal balance, song by song and scene by scene"
         icon: "sparkle"; shape: "sunny"; toggleKey: "ieq_on"
         RowLayout {
             Layout.fillWidth: true

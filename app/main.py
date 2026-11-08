@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resona — open spatial sound engine for Linux."""
+"""Resona: open spatial sound engine for Linux."""
 from __future__ import annotations
 
 import os

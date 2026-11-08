@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -95,6 +96,7 @@ class Backend(QObject):
         self._apps: list[dict] = []
         self._auto_base: dict | None = None
         self._auto_app = ""
+        self._captured: set[str] = set()
         self._call.connect(lambda cb, res: cb(res))
         self._recompute_curve()
         self._push_correction()
@@ -260,10 +262,10 @@ class Backend(QObject):
             self._running = False
             if self._restarts < 5:
                 self._restarts += 1
-                self.toast.emit("Engine stopped unexpectedly — restarting")
+                self.toast.emit("Engine stopped unexpectedly, restarting")
                 self.startEngine()
             else:
-                self._status = "Engine keeps crashing — see logs"
+                self._status = "Engine keeps crashing, see logs"
                 self.stateChanged.emit()
 
     def shutdown(self):
@@ -343,6 +345,7 @@ class Backend(QObject):
             inputs = json.loads(out or "[]")
         except json.JSONDecodeError:
             return
+        self._capture_bypass(inputs)
         rules = self._state.get("app_rules", {})
         apps, seen = [], set()
         for si in inputs:
@@ -376,6 +379,57 @@ class Backend(QObject):
         elif self._auto_base:
             base, self._auto_base, self._auto_app = self._auto_base, None, ""
             self._restore(base)
+
+    def _capture_bypass(self, inputs: list):
+        """Route apps that open the hardware output directly back through Resona.
+
+        Games using FMOD/Wwise PulseAudio backends (War Thunder, many Proton titles)
+        enumerate sinks and connect to the first device by name instead of the
+        default. Those streams skip every effect and ignore the volume keys, which
+        act on the default (Resona) sink. Only streams sitting on the exact device
+        Resona plays into are moved, so deliberate routing to another output stays.
+        """
+        if not self._running or self._busy or not self._state.get("capture_all", True):
+            return
+        target = self.pipe.target
+        if not target:
+            return
+        try:
+            sinks = json.loads(pipeline._run("pactl", "-f", "json", "list", "sinks") or "[]")
+        except json.JSONDecodeError:
+            return
+        target_idx = next((s["index"] for s in sinks if s.get("name") == target), None)
+        if target_idx is None:
+            return
+        moved = []
+        for si in inputs:
+            p = si.get("properties", {})
+            if si.get("sink") != target_idx:
+                continue
+            if p.get("node.name", "").startswith("resona") or p.get("node.name") == self.pipe.out_name:
+                continue  # our own engine output
+            if p.get("node.dont-move") == "true":
+                continue
+            r = subprocess.run(["pactl", "move-sink-input", str(si["index"]), self.pipe.sink_name],
+                               capture_output=True, timeout=3)
+            if r.returncode == 0:
+                moved.append(p.get("application.name") or p.get("application.process.binary") or "An app")
+        for name in dict.fromkeys(moved):
+            if name not in self._captured:
+                self._captured.add(name)
+                self.toast.emit(f"{name} was bypassing Resona. Routed it through, volume keys work now")
+
+    @Property(bool, notify=stateChanged)
+    def captureAll(self):
+        return self._state.get("capture_all", True)
+
+    @Slot(bool)
+    def setCaptureAll(self, on: bool):
+        self._state["capture_all"] = on
+        self.stateChanged.emit()
+        self._touch()
+        if on:
+            self._scan_apps()
 
     @Property("QVariantList", notify=appsChanged)
     def apps(self):
@@ -455,7 +509,7 @@ class Backend(QObject):
     @Slot(str, str)
     def setCardProfile(self, card: str, profile: str):
         if hardware.set_profile(card, profile):
-            self.toast.emit("Output mode changed — Resona is re-routing")
+            self.toast.emit("Output mode changed, Resona is re-routing")
             self._hw_timer.start()
             self._evt_timer.start(900)
         else:
@@ -465,7 +519,7 @@ class Backend(QObject):
     def setHiRes(self, on: bool):
         max_rate = max([s["maxRate"] for c in self._hw for s in c["sinks"] if s["name"] == self.output] or [192000])
         rates = hardware.set_hires(on, max_rate)
-        self.toast.emit(f"Hi-Res on: native {', '.join(f'{r/1000:g}' for r in rates)} kHz — no resampling"
+        self.toast.emit(f"Hi-Res on: native {', '.join(f'{r/1000:g}' for r in rates)} kHz, no resampling"
                         if on else "Hi-Res off: everything runs at 48 kHz")
         self._hw_timer.start()
 
@@ -537,7 +591,7 @@ class Backend(QObject):
             def done(res):
                 self._searching = False
                 if isinstance(res, Exception) or not res:
-                    self.toast.emit("Couldn't reach the AutoEq database — check your connection")
+                    self.toast.emit("Couldn't reach the AutoEq database, check your connection")
                     self._aeq_index = None
                 else:
                     self._aeq_index = res
@@ -823,7 +877,7 @@ class Backend(QObject):
 
     @Slot(str)
     def setHeadphoneSpatial(self, mode: str):
-        """off | xfeed | hrtf — mutually exclusive headphone renderers."""
+        """off | xfeed | hrtf: mutually exclusive headphone renderers."""
         self._apply({"xfeed_on": 1 if mode == "xfeed" else 0, "hrtf_on": 1 if mode == "hrtf" else 0})
         self._state["modified"] = True
         self.stateChanged.emit()

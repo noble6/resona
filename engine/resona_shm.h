@@ -1,5 +1,5 @@
 /*
- * Resona — shared memory contract between the DSP engine and the UI.
+ * Resona: shared memory contract between the DSP engine and the UI.
  * The UI writes params[] / corr[] then bumps param_seq; the engine writes meters + rings.
  * Layout is mirrored in app/resona/shm.py (offsets verified by tests/test_dsp.c).
  * SPDX-License-Identifier: GPL-3.0-or-later

@@ -1,6 +1,6 @@
 # Contributing to Resona
 
-Thanks for helping make Linux sound better! 🎧
+Thanks for helping make Linux sound better!
 
 ## Layout
 - `engine/`: the C DSP (LADSPA). Realtime rules: no allocation, locks or syscalls in `run()`.

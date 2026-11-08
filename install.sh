@@ -38,4 +38,4 @@ Keywords=equalizer;eq;bass;dolby;dts;surround;spatial;audio;effects;pipewire;
 StartupWMClass=resona
 DESK
 command -v update-desktop-database >/dev/null && update-desktop-database -q "$PREFIX/share/applications" || true
-echo "Resona installed to $PREFIX — launch it from your app menu or run: resona"
+echo "Resona installed to $PREFIX. Launch it from your app menu or run: resona"

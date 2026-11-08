@@ -69,7 +69,7 @@ Page {
                 Layout.fillWidth: true
                 Column { Layout.fillWidth: true
                     Label { text: "My presets"; role: "titleL"; emphasized: true }
-                    Label { text: "Snapshot everything — profile, EQ, spatial, correction — and share it as JSON"; role: "body"; color: Theme.inkVariant } }
+                    Label { text: "Snapshot everything (profile, EQ, spatial, correction) and share it as JSON"; role: "body"; color: Theme.inkVariant } }
                 Btn { text: "Import…"; icon: "upload"; variant: "outlined"; onClicked: importDlg.open() }
             }
             RowLayout {
@@ -109,6 +109,14 @@ Page {
             id: smartCol
             anchors.fill: parent; anchors.margins: 28
             spacing: 14
+            RowLayout {
+                Layout.fillWidth: true
+                Column { Layout.fillWidth: true
+                    Label { text: "Route every app through Resona"; role: "titleM"; emphasized: true }
+                    Label { text: "Catches games that open your speakers directly (FMOD/Wwise titles like War Thunder), so effects and volume keys apply"
+                            role: "body"; color: Theme.inkVariant; width: parent.width; wrapMode: Text.WordWrap } }
+                M3Switch { checked: audio.captureAll; onToggled: (v) => audio.setCaptureAll(v) }
+            }
             RowLayout {
                 Layout.fillWidth: true
                 Column { Layout.fillWidth: true

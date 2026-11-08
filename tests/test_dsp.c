@@ -1,4 +1,4 @@
-/* Offline verification of resona.so — loads it like PipeWire does (dlopen + LADSPA). */
+/* Offline verification of resona.so: loads it like PipeWire does (dlopen + LADSPA). */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <fcntl.h>

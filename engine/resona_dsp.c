@@ -1,9 +1,9 @@
 /*
- * Resona DSP engine v2 — LADSPA plugin hosted by PipeWire's filter-chain.
+ * Resona DSP engine v2: LADSPA plugin hosted by PipeWire's filter-chain.
  *
  * Two labels:
  *   resona           2 in -> 2 out   (headphones / stereo speakers)
- *   resona_surround  2 in -> 8 out   (FL FR FC LFE RL RR SL SR — HDMI, analog 5.1/7.1, S/PDIF AC3)
+ *   resona_surround  2 in -> 8 out   (FL FR FC LFE RL RR SL SR: HDMI, analog 5.1/7.1, S/PDIF AC3)
  *
  * Signal chain:
  *   preamp → Smart Leveler → Intelligent EQ → 10-band EQ → Adaptive Loudness → Voice Focus

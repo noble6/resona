@@ -45,7 +45,7 @@ Item {
         color: root.activeColor
         visible: root.frac < 0.97
     }
-    // active (wavy) track — path spans exactly the active range; phase scrolls the sine
+    // active (wavy) track: path spans exactly the active range; phase scrolls the sine
     Shape {
         id: wave
         readonly property real a: root.bipolar ? Math.min(root.zeroFrac, root.frac) * (root.width - 4) + 2 : 0

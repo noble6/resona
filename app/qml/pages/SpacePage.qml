@@ -4,7 +4,7 @@ import "../components"
 
 Page {
     title: "Space"
-    subtitle: "Spatial rendering — width, depth, room and headphone externalization"
+    subtitle: "Spatial rendering: width, depth, room and headphone externalization"
     RowLayout {
         width: parent.width
         spacing: 20
@@ -33,8 +33,8 @@ Page {
                 Layout.fillWidth: true
                 readonly property string mode: audio.params.hrtf_on ? "hrtf" : (audio.params.xfeed_on ? "xfeed" : "off")
                 title: "Headphone spatial"
-                subtitle: mode === "hrtf" ? "Binaural virtual speakers — head-shadow, ITD and pinna cues"
-                        : mode === "xfeed" ? "Crossfeed — speaker-like imaging, less fatigue" : "Off — direct stereo"
+                subtitle: mode === "hrtf" ? "Binaural virtual speakers with head-shadow, ITD and pinna cues"
+                        : mode === "xfeed" ? "Crossfeed: speaker-like imaging, less fatigue" : "Off: direct stereo"
                 icon: "headphones"; shape: "clover4"
                 enabled: audio.outputLayout.channels <= 2
                 ButtonGroup {
@@ -66,7 +66,7 @@ Page {
         readonly property bool multi: audio.outputLayout.channels > 2
         title: "Surround upmix"
         subtitle: multi ? "Stereo → " + audio.outputLayout.name + ": steered centre for dialogue, decorrelated surrounds, LFE"
-                        : "Your output is stereo — pick a 5.1 / 7.1 / AC3 mode on the Hardware page to unlock"
+                        : "Your output is stereo. Pick a 5.1, 7.1 or AC3 mode on the Hardware page to unlock"
         icon: "surround"; shape: "burst12"; toggleKey: multi ? "upmix_on" : ""
         enabled: multi
         RowLayout {

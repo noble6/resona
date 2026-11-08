@@ -110,7 +110,7 @@ APP_RULES_DEFAULT = {
     "mpv": "Movie", "vlc": "Movie", "celluloid": "Movie", "totem": "Movie", "haruna": "Movie", "kodi": "Movie",
     "stremio": "Movie", "jellyfin": "Movie", "plex": "Movie", "smplayer": "Movie",
     "steam": "Gaming", "wine": "Gaming", "wine64-preloader": "Gaming", "gamescope": "Gaming", "lutris": "Gaming",
-    "heroic": "Gaming", "retroarch": "Gaming", "minecraft": "Gaming", "java": "Gaming",
+    "heroic": "Gaming", "aces": "Gaming", "war thunder": "Gaming", "retroarch": "Gaming", "minecraft": "Gaming", "java": "Gaming",
     "discord": "Voice", "vesktop": "Voice", "zoom": "Voice", "teams": "Voice", "skype": "Voice",
     "telegram-desktop": "Voice", "signal-desktop": "Voice", "slack": "Voice",
 }

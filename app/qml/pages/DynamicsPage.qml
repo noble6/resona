@@ -29,7 +29,7 @@ Page {
             }
             EffectCard {
                 Layout.fillWidth: true
-                title: "Limiter"; subtitle: "Lookahead brickwall — protects ears and speakers"
+                title: "Limiter"; subtitle: "Lookahead brickwall that protects ears and speakers"
                 icon: "shield"; shape: "gem"; toggleKey: "lim_on"
                 ParamSlider { Layout.fillWidth: true; key: "lim_ceil"; label: "Ceiling"; from: -6; to: 0; stepSize: 0.1
                               format: function(v) { return v.toFixed(1) + " dBFS" } }
@@ -81,7 +81,7 @@ Page {
 
     EffectCard {
         width: parent.width
-        title: "Tube Warmth"; subtitle: "Analog even-harmonic saturation — the glow of a valve amp"
+        title: "Tube Warmth"; subtitle: "Analog even-harmonic saturation, the glow of a valve amp"
         icon: "fire"; shape: "cookie6"; toggleKey: "tube_on"
         ParamSlider { Layout.fillWidth: true; key: "tube_drive"; label: "Drive" }
     }

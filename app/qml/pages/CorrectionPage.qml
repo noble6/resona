@@ -6,7 +6,7 @@ import "../components"
 Page {
     id: page
     title: "Correction"
-    subtitle: "Make your headphones measure right — then add any impulse response you love"
+    subtitle: "Make your headphones measure right, then add any impulse response you love"
     readonly property var corr: audio.correction
     readonly property var ir: audio.ir
 
@@ -47,7 +47,7 @@ Page {
                 }
                 SearchField {
                     Layout.fillWidth: true
-                    placeholder: "Find your headphones — e.g. HD 650, Moondrop, AirPods"
+                    placeholder: "Find your headphones, e.g. HD 650, Moondrop, AirPods"
                     busy: audio.searching
                     onEdited: (t) => searchDelay.restart()
                     onAccepted: (t) => audio.searchAutoEq(t)
@@ -119,7 +119,7 @@ Page {
                         Column { Layout.fillWidth: true
                             Label { text: "Convolver"; role: "titleL"; emphasized: true }
                             Label { text: page.ir.name ? page.ir.name + " · " + page.ir.channels + " ch · " + page.ir.seconds + " s · " + (page.ir.rate / 1000) + " kHz"
-                                                      : "ViPER/JamesDSP IRS, room impulses, HRIRs — any WAV"
+                                                      : "ViPER/JamesDSP IRS, room impulses, HRIRs or any WAV"
                                     role: "body"; color: Theme.inkVariant; width: parent.width; elide: Text.ElideRight } }
                         M3Switch { visible: !!page.ir.name; checked: !!page.ir.on; onToggled: (v) => audio.setIrOn(v) }
                     }

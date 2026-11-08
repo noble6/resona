@@ -118,7 +118,7 @@ Page {
                 Label {
                     anchors.centerIn: parent
                     visible: !audio.processing
-                    text: audio.running ? "Play something — the analyzer wakes up with your audio" : audio.status
+                    text: audio.running ? "Play something and the analyzer wakes up with your audio" : audio.status
                     role: "bodyL"; color: Theme.inkVariant
                 }
             }
@@ -203,7 +203,7 @@ Page {
         columnSpacing: 16; rowSpacing: 16
         EffectCard {
             Layout.fillWidth: true
-            title: "DeepBass"; subtitle: "Psychoacoustic bass — felt even on tiny speakers"
+            title: "DeepBass"; subtitle: "Psychoacoustic bass you feel even on tiny speakers"
             icon: "bass"; shape: "cookie9"; toggleKey: "bass_on"
             ParamSlider { Layout.fillWidth: true; key: "bass_amt"; label: "Harmonic bass" }
         }
