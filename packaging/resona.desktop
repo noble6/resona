@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Resona
+GenericName=Sound Enhancer
+Comment=Spatial sound, DeepBass, Intelligent EQ, headphone correction and surround for PipeWire
+Exec=resona
+Icon=resona
+Categories=AudioVideo;Audio;Mixer;
+Keywords=equalizer;eq;bass;dolby;dts;atmos;surround;spatial;hrtf;autoeq;viper;audio;effects;pipewire;
+StartupWMClass=resona

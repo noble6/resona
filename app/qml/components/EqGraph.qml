@@ -1,0 +1,131 @@
+import QtQuick
+
+// Interactive 10-band EQ: drag handles, live response curve, spectrum underlay.
+Item {
+    id: root
+    readonly property var freqs: audio.eqFreqs
+    readonly property real range: 15
+    readonly property real padY: 22
+    function fx(f) { return Math.log(f / 20) / Math.log(1000) * width }
+    function gy(db) { return height / 2 - db / range * (height / 2 - padY) }
+    function fmtF(f) { return f >= 1000 ? (f / 1000) + "k" : "" + f }
+    function rgba(c, a) { return "rgba(" + Math.round(c.r * 255) + "," + Math.round(c.g * 255) + "," + Math.round(c.b * 255) + "," + a + ")" }
+
+    Canvas {
+        id: grid
+        anchors.fill: parent
+        onWidthChanged: requestPaint(); onHeightChanged: requestPaint()
+        Connections { target: Theme; function onSeedChanged() { grid.requestPaint() } function onDarkChanged() { grid.requestPaint() } }
+        onPaint: {
+            const ctx = getContext("2d"); ctx.reset()
+            ctx.lineWidth = 1
+            for (const db of [-12, -6, 0, 6, 12]) {
+                const y = Math.round(root.gy(db)) + 0.5
+                ctx.strokeStyle = root.rgba(Theme.outlineVariant, db === 0 ? 1 : 0.55)
+                ctx.setLineDash(db === 0 ? [] : [2, 6])
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke()
+                ctx.fillStyle = root.rgba(Theme.inkVariant, 0.7)
+                ctx.font = "11px '" + Theme.font + "'"
+                ctx.fillText((db > 0 ? "+" : "") + db, 6, y - 4)
+            }
+            ctx.setLineDash([2, 6])
+            for (const f of [50, 100, 200, 500, 1000, 2000, 5000, 10000]) {
+                const x = Math.round(root.fx(f)) + 0.5
+                ctx.strokeStyle = root.rgba(Theme.outlineVariant, 0.35)
+                ctx.beginPath(); ctx.moveTo(x, root.padY); ctx.lineTo(x, height - root.padY); ctx.stroke()
+            }
+        }
+    }
+
+    Spectrum {
+        x: root.fx(28); width: root.fx(18000) - x
+        height: parent.height
+        showBefore: false
+        lineWidth: 1.5
+        opacity: 0.32
+    }
+
+    Canvas {
+        id: curve
+        anchors.fill: parent
+        property var pts: audio.eqCurve
+        onPtsChanged: requestPaint()
+        onWidthChanged: requestPaint()
+        Connections { target: Theme; function onSeedChanged() { curve.requestPaint() } }
+        onPaint: {
+            const ctx = getContext("2d"); ctx.reset()
+            const n = pts.length; if (!n) return
+            const y0 = root.gy(0)
+            ctx.beginPath(); ctx.moveTo(0, y0)
+            for (let i = 0; i < n; i++) ctx.lineTo(i / (n - 1) * width, root.gy(pts[i]))
+            ctx.lineTo(width, y0); ctx.closePath()
+            const g = ctx.createLinearGradient(0, root.padY, 0, height - root.padY)
+            g.addColorStop(0, root.rgba(Theme.primary, 0.35)); g.addColorStop(0.5, root.rgba(Theme.primary, 0.04))
+            g.addColorStop(1, root.rgba(Theme.tertiary, 0.35))
+            ctx.fillStyle = g; ctx.fill()
+            ctx.beginPath()
+            for (let i = 0; i < n; i++) { const x = i / (n - 1) * width, y = root.gy(pts[i]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y) }
+            ctx.lineWidth = 4; ctx.lineJoin = "round"; ctx.lineCap = "round"
+            const lg = ctx.createLinearGradient(0, 0, width, 0)
+            lg.addColorStop(0, root.rgba(Theme.primary, 1)); lg.addColorStop(1, root.rgba(Theme.tertiary, 1))
+            ctx.strokeStyle = lg; ctx.stroke()
+        }
+    }
+
+    Repeater {
+        model: root.freqs.length
+        delegate: Item {
+            id: h
+            required property int index
+            readonly property string key: "eq" + index
+            readonly property real gain: audio.params[key] || 0
+            readonly property bool active: ma.pressed || ma.containsMouse
+            width: 44; height: 44
+            x: root.fx(root.freqs[index]) - width / 2
+            y: root.gy(gain) - height / 2
+            Behavior on y { enabled: !ma.pressed; NumberAnimation { duration: Theme.medium; easing.type: Easing.OutBack } }
+
+            MorphShape {
+                anchors.centerIn: parent
+                width: ma.pressed ? 40 : 26; height: width
+                Behavior on width { NumberAnimation { duration: Theme.medium; easing.type: Easing.OutBack } }
+                shape: ma.pressed ? "cookie9" : "circle"
+                spinning: ma.pressed
+                spinDuration: 4000
+                color: Theme.primary; color2: Theme.tertiary
+                strokeWidth: 3; strokeColor: Theme.surface
+            }
+            Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: Theme.inkPrimary }
+            Rectangle {
+                visible: opacity > 0
+                opacity: h.active ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Theme.fast } }
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: h.gain >= 0 ? -height - 2 : parent.height + 2
+                width: tip.implicitWidth + 20; height: 30; radius: 15
+                color: Theme.inverseSurface
+                Text { id: tip; anchors.centerIn: parent
+                       text: (h.gain > 0 ? "+" : "") + h.gain.toFixed(1) + " dB · " + root.fmtF(root.freqs[h.index]) + "Hz"
+                       color: Theme.inverseOnSurface; font.family: Theme.font; font.pixelSize: 12; font.weight: Font.DemiBold }
+            }
+            MouseArea {
+                id: ma
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.SizeVerCursor
+                preventStealing: true
+                property real y0; property real g0
+                onPressed: (e) => { y0 = mapToItem(root, e.x, e.y).y; g0 = h.gain }
+                onPositionChanged: (e) => {
+                    if (!pressed) return
+                    const dy = mapToItem(root, e.x, e.y).y - y0
+                    let g = g0 - dy / (root.height / 2 - root.padY) * root.range
+                    g = Math.max(-root.range, Math.min(root.range, Math.round(g * 10) / 10))
+                    audio.setParam(h.key, g)
+                }
+                onDoubleClicked: audio.setParam(h.key, 0)
+                onWheel: (w) => audio.setParam(h.key, Math.max(-15, Math.min(15, h.gain + (w.angleDelta.y > 0 ? 0.5 : -0.5))))
+            }
+        }
+    }
+}
