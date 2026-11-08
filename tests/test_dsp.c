@@ -173,6 +173,46 @@ int main(int argc, char **argv)
         CHECK(h2 > 0.01 && h3 > 0.005, "DeepBass harmonics: 2nd %.1f dB, 3rd %.1f dB", 20 * log10(h2 / .3), 20 * log10(h3 / .3));
         rm(&I);
 
+        /* 5b. Bass voicings: Sub Boost, Punchy, Warm */
+        {
+            double g45[4], g150[4], h2r[4], kick[4];
+            for (int t = 0; t < 4; t++) {
+                /* filter only (harmonics off): steady tones at 45 and 150 Hz */
+                neutral(); M->params[P_BASS_ON] = 1; M->params[P_BASS_PUNCH] = 1; M->params[P_BASS_TYPE] = t; M->param_seq++;
+                I = mk(D2, fs, n);
+                for (unsigned i = 0; i < n; i++) I.il[i] = I.ir[i] = 0.02f * sinf(2 * M_PI * 45 * i / fs) + 0.02f * sinf(2 * M_PI * 150 * i / fs);
+                process(&I, n, 512);
+                g45[t] = 20 * log10(tone(I.o[0], fs, n, 45, fs) / 0.02); g150[t] = 20 * log10(tone(I.o[0], fs, n, 150, fs) / 0.02);
+                rm(&I);
+                /* harmonics only: even/odd balance from a 50 Hz tone */
+                neutral(); M->params[P_BASS_ON] = 1; M->params[P_BASS_AMT] = 1; M->params[P_BASS_TYPE] = t; M->param_seq++;
+                I = mk(D2, fs, n);
+                for (unsigned i = 0; i < n; i++) I.il[i] = I.ir[i] = 0.3f * sinf(2 * M_PI * 50 * i / fs);
+                process(&I, n, 512);
+                h2r[t] = 20 * log10(tone(I.o[0], fs, n, 100, fs) / (tone(I.o[0], fs, n, 150, fs) + 1e-9));
+                rm(&I);
+                /* transients: gated 60 Hz bursts, onset level relative to the sustained part */
+                neutral(); M->params[P_BASS_ON] = 1; M->params[P_BASS_AMT] = 1; M->params[P_BASS_PUNCH] = 0.5f;
+                M->params[P_BASS_TYPE] = t; M->param_seq++;
+                I = mk(D2, fs, n);
+                unsigned per = fs / 2, on = (unsigned)(0.3 * fs);
+                for (unsigned i = 0; i < n; i++) I.il[i] = I.ir[i] = (i % per) < on ? 0.2f * sinf(2 * M_PI * 60 * (i % per) / fs) : 0;
+                process(&I, n, 512);
+                double att = 0, sus = 0;
+                for (unsigned b = per * 2; b + per <= n; b += per) {
+                    att += rms(I.o[0], b + la, b + la + fs / 40);
+                    sus += rms(I.o[0], b + la + (unsigned)(0.18 * fs), b + la + (unsigned)(0.28 * fs));
+                }
+                kick[t] = 20 * log10(att / sus);
+                rm(&I);
+            }
+            CHECK(g45[1] > g45[0] + 1 && g45[1] - g150[1] > 6, "Sub Boost lifts the sub octave: 45 Hz %+.1f dB (balanced %+.1f), 150 Hz %+.1f dB",
+                  g45[1], g45[0], g150[1]);
+            CHECK(kick[2] > kick[0] + 1.5, "Punchy adds transient kick: onset %+.1f dB vs sustain (balanced %+.1f dB)", kick[2], kick[0]);
+            CHECK(h2r[3] > h2r[2] + 6, "Warm favours even harmonics: H2/H3 %.1f dB (punchy %.1f dB)", h2r[3], h2r[2]);
+            CHECK(g150[3] > g150[1] + 3, "Warm reaches the low mids: 150 Hz %+.1f dB (sub %+.1f dB)", g150[3], g150[1]);
+        }
+
         /* 6. Leveler */
         neutral(); M->params[P_LEV_ON] = 1; M->params[P_LEV_AMT] = 1; M->param_seq++;
         I = mk(D2, fs, n);

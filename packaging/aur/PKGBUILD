@@ -1,12 +1,12 @@
 # Maintainer: noble6 <148613961+noble6@users.noreply.github.com>
 pkgname=resona-git
-pkgver=2.0.0
+pkgver=2.1.0
 pkgrel=1
 pkgdesc="Spatial audio, psychoacoustic bass, Intelligent EQ, AutoEq correction and surround upmix for PipeWire"
 arch=('x86_64' 'aarch64')
 url="https://github.com/noble6/resona"
 license=('GPL-3.0-or-later')
-depends=('pipewire' 'pipewire-pulse' 'wireplumber' 'pyside6' 'python-numpy' 'qt6-declarative')
+depends=('pipewire' 'pipewire-pulse' 'libpulse' 'wireplumber' 'pyside6' 'python-numpy' 'qt6-declarative')
 makedepends=('git' 'gcc' 'make')
 provides=('resona')
 conflicts=('resona')

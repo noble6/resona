@@ -35,6 +35,8 @@ enum {
     P_CORR_ON, P_CORR_PREAMP,             /* correction EQ (AutoEq / DDC / EqualizerAPO) */
     P_UPMIX_ON, P_UPMIX_CENTER, P_UPMIX_SURR, P_UPMIX_LFE,
     P_LAYOUT,                             /* bitmask: 1 centre, 2 LFE, 4 side pair, 8 rear pair */
+    /* v2.1 */
+    P_BASS_TYPE,                          /* 0 balanced 1 sub boost 2 punchy 3 warm */
     P_COUNT
 };
 

@@ -52,6 +52,8 @@ PARAMS = [
     "corr_on", "corr_preamp",
     "upmix_on", "upmix_center", "upmix_surr", "upmix_lfe",
     "layout",
+    # v2.1
+    "bass_type",
 ]
 INDEX = {n: i for i, n in enumerate(PARAMS)}
 

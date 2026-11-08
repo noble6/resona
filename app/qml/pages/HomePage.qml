@@ -202,26 +202,45 @@ Page {
         columns: width > 900 ? 2 : 1
         columnSpacing: 16; rowSpacing: 16
         EffectCard {
-            Layout.fillWidth: true
+            id: bassCard
+            Layout.fillWidth: true; Layout.fillHeight: true
             title: "DeepBass"; subtitle: "Psychoacoustic bass you feel even on tiny speakers"
             icon: "bass"; shape: "cookie9"; toggleKey: "bass_on"
+            readonly property int bassType: Math.round(audio.params.bass_type || 0)
+            ButtonGroup {
+                Layout.fillWidth: true
+                itemHeight: 40
+                current: audio.bassTypes[bassCard.bassType] || ""
+                model: audio.bassTypes.map(t => ({ key: t, label: t }))
+                onPicked: (k) => audio.setParam("bass_type", audio.bassTypes.indexOf(k))
+            }
+            Label {
+                Layout.fillWidth: true; wrapMode: Text.WordWrap
+                role: "body"; color: Theme.inkVariant
+                text: ["Even blend of real low end and harmonic bass. Works with everything",
+                       "Deep rumble down at 40 to 60 Hz for films, EDM and subwoofers",
+                       "Tight kick and bite on every drum hit, less boom. Great for games and rock",
+                       "Round, full body from the low mids with soft even harmonics"][bassCard.bassType] || ""
+            }
             ParamSlider { Layout.fillWidth: true; key: "bass_amt"; label: "Harmonic bass" }
+            ParamSlider { Layout.fillWidth: true; key: "bass_punch"
+                          label: ["Low shelf", "Sub weight", "Punch", "Body"][bassCard.bassType] || "Low end" }
         }
         EffectCard {
-            Layout.fillWidth: true
+            Layout.fillWidth: true; Layout.fillHeight: true
             title: "Clarity"; subtitle: "Restores detail and air lost in compression"
             icon: "sparkle"; shape: "burst12"; toggleKey: "clar_on"
             ParamSlider { Layout.fillWidth: true; key: "clar_amt"; label: "Detail" }
         }
         EffectCard {
-            Layout.fillWidth: true
+            Layout.fillWidth: true; Layout.fillHeight: true
             title: "3D Stage"; subtitle: "Pushes sound outside your head"
             icon: "space"; shape: "flower8"; toggleKey: "stage_on"
             ParamSlider { Layout.fillWidth: true; key: "stage_width"; label: "Width"; from: 0; to: 2
                           format: function(v) { return Math.round(v * 100) + "%" } }
         }
         EffectCard {
-            Layout.fillWidth: true
+            Layout.fillWidth: true; Layout.fillHeight: true
             title: "Voice Focus"; subtitle: "Dialogue cuts through music and effects"
             icon: "mic"; shape: "pill"; toggleKey: "voice_on"
             ParamSlider { Layout.fillWidth: true; key: "voice_amt"; label: "Focus" }

@@ -4,7 +4,7 @@ message: "If you use Resona in research or a project, please cite it."
 type: software
 license: GPL-3.0-or-later
 repository-code: "https://github.com/noble6/resona"
-version: "2.0.0"
+version: "2.1.0"
 keywords: [pipewire, audio, dsp, hrtf, equalizer, autoeq, surround, linux]
 authors:
   - alias: "noble6"

@@ -31,7 +31,7 @@ Windows laptops ship with Dolby Atmos, DTS:X or a Realtek console. Android has D
 | | |
 |---|---|
 | **Spatial HRTF** | Binaural virtual speakers for headphones (Brown–Duda structural head model: head shadow, interaural delay, pinna cues), equalized to stay tonally neutral |
-| **DeepBass** | Psychoacoustic *missing-fundamental* bass. Harmonics your brain hears as sub-bass, so even laptop speakers sound big |
+| **DeepBass** | Psychoacoustic *missing-fundamental* bass. Harmonics your brain hears as sub-bass, so even laptop speakers sound big. Four voicings: **Balanced**, **Sub Boost** (real rumble at 40 to 60 Hz), **Punchy** (transient kick on every drum hit, less mud) and **Warm** (full low mids, soft even harmonics) |
 | **Intelligent EQ** | Listens to what's playing and steers the long-term tonal balance toward a target (Balanced, Warm, Focused, Bright), song by song and scene by scene |
 | **Surround upmix** | Stereo → 5.1 / 7.1 for HDMI receivers, analog 5.1 and **S/PDIF Dolby Digital (AC3)**. Correlation-steered dialogue centre, decorrelated surrounds, band-limited LFE |
 | **Headphone correction** | Search **AutoEq's ~8,800 measured headphones** and apply one in a click. Imports EqualizerAPO / AutoEq `.txt` and **ViPER DDC `.vdc`** |
@@ -62,6 +62,7 @@ Windows laptops ship with Dolby Atmos, DTS:X or a Realtek console. Android has D
 - **Follows your output.** Plug in headphones or switch devices from the tray and Resona moves with you
 - **Hold to compare.** Instant A/B against the untouched signal
 - **Presets** you can save, import and share as JSON
+- **Updates itself** from GitHub releases: only when you ask, weekly or monthly. Automatic installs wait for a quiet moment, so music or a game is never cut off
 
 ## Screenshots
 

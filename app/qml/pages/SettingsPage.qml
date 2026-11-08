@@ -187,6 +187,99 @@ Page {
         }
     }
 
+    // ---------------------------------------------------- updates
+    Card {
+        id: updCard
+        readonly property var u: audio.updateInfo
+        readonly property bool busy: u.state === "checking" || u.state === "installing" || u.state === "restarting"
+        width: parent.width
+        height: updCol.implicitHeight + 56
+        color: u.state === "available" ? Theme.mix(Theme.primaryContainer, Theme.surfaceContainer, 0.55) : Theme.surfaceContainer
+        Behavior on color { ColorAnimation { duration: Theme.medium } }
+        ColumnLayout {
+            id: updCol
+            anchors.fill: parent; anchors.margins: 28
+            spacing: 16
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 18
+                MorphShape {
+                    width: 56; height: 56
+                    Layout.preferredWidth: 56; Layout.preferredHeight: 56
+                    shape: updCard.busy ? "burst12" : updCard.u.state === "available" ? "flower8" : "cookie9"
+                    color: updCard.u.state === "error" ? Theme.error : Theme.primary
+                    color2: Theme.tertiary
+                    spinning: updCard.busy
+                    spinDuration: 2400
+                    Icon { anchors.centerIn: parent; size: 26; color: Theme.inkPrimary
+                           name: updCard.u.state === "available" ? "download" : updCard.u.state === "current" ? "check" : "rocket" }
+                }
+                Column {
+                    Layout.fillWidth: true
+                    Label { text: "Updates"; role: "titleL"; emphasized: true }
+                    Label {
+                        width: parent.width; wrapMode: Text.WordWrap
+                        role: "body"; color: Theme.inkVariant
+                        text: (updCard.u.message || ("Resona " + audio.version + ", straight from GitHub releases"))
+                              + (updCard.u.last && !updCard.busy ? "  ·  last checked " + new Date(updCard.u.last * 1000).toLocaleDateString() : "")
+                    }
+                }
+                Btn {
+                    visible: updCard.u.state === "available" && updCard.u.kind === "user"
+                    text: "Update now"; icon: "download"; size: 56
+                    onClicked: audio.installUpdate()
+                }
+                Btn {
+                    visible: updCard.u.state !== "available" || updCard.u.kind !== "user"
+                    text: updCard.busy ? "Working…" : "Check now"; icon: "reset"; variant: "tonal"; size: 56
+                    enabled: !updCard.busy; opacity: enabled ? 1 : 0.6
+                    onClicked: audio.checkUpdates()
+                }
+            }
+            Rectangle {
+                visible: updCard.u.state === "available" && updCard.u.notes !== ""
+                Layout.fillWidth: true
+                implicitHeight: notes.implicitHeight + 32
+                radius: 20
+                color: Theme.surfaceContainerHigh
+                Label {
+                    id: notes
+                    anchors.fill: parent; anchors.margins: 16
+                    wrapMode: Text.WordWrap; textFormat: Text.MarkdownText
+                    role: "body"; color: Theme.ink
+                    text: (updCard.u.notes || "").split("\n").slice(0, 14).join("\n")
+                    maximumLineCount: 14; elide: Text.ElideRight
+                }
+            }
+            Label {
+                visible: updCard.u.kind !== "user"
+                Layout.fillWidth: true; wrapMode: Text.WordWrap
+                role: "body"; color: Theme.inkVariant
+                text: updCard.u.kind === "source" ? "Running from a git checkout, so Resona only checks. Update with git pull."
+                                                  : "Installed by your package manager, so Resona only checks. Update it there."
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 16
+                Label { text: "Check automatically"; role: "labelL"; color: Theme.inkVariant }
+                ButtonGroup {
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 460
+                    itemHeight: 40
+                    current: updCard.u.freq
+                    model: [{ key: "manual", label: "Only when I ask" }, { key: "weekly", label: "Weekly" },
+                            { key: "monthly", label: "Monthly" }]
+                    onPicked: (k) => audio.setUpdateFreq(k)
+                }
+                Item { Layout.fillWidth: true }
+                Label { text: "Install by itself"; role: "labelL"; color: Theme.inkVariant
+                        opacity: updCard.u.freq === "manual" ? 0.4 : 1 }
+                M3Switch { checked: updCard.u.auto; enabled: updCard.u.freq !== "manual" && updCard.u.kind === "user"
+                           opacity: enabled ? 1 : 0.4; onToggled: (v) => audio.setUpdateAuto(v) }
+            }
+        }
+    }
+
     GridLayout {
         width: parent.width
         columns: 2; columnSpacing: 16
@@ -210,7 +303,7 @@ Page {
                 MorphShape { width: 56; height: 56; shape: "cookie12"; color: Theme.primary; color2: Theme.tertiary; spinning: true
                              Icon { anchors.centerIn: parent; name: "waves"; size: 26; color: Theme.inkPrimary } }
                 Column { Layout.fillWidth: true
-                    Label { text: "Resona 2.0 · open source (GPL-3.0)"; role: "titleM"; emphasized: true }
+                    Label { text: "Resona " + audio.version + " · open source (GPL-3.0)"; role: "titleM"; emphasized: true }
                     Label { text: "Native DSP engine · " + (audio.sampleRate / 1000) + " kHz · " + audio.outputLayout.name + " · 1.5 ms latency"
                             role: "body"; color: Theme.inkVariant } }
             }

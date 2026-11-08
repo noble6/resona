@@ -11,7 +11,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "app"))
-from resona import correction, hardware, presets, shm  # noqa: E402
+from resona import __version__, correction, hardware, presets, shm, updater  # noqa: E402
 
 fails = 0
 
@@ -83,6 +83,18 @@ check(hardware.profile_kind("output:iec958-ac3-surround-51") == "encoded" and
       hardware.profile_kind("output:iec958-stereo") == "optical" and
       hardware.profile_kind("output:hdmi-surround71") == "hdmi", "profile classification (AC3, optical, HDMI)")
 
+# bass voicings: names match the engine table, every profile picks a valid one
+src = (ROOT / "engine" / "resona_dsp.c").read_text()
+check(src.count("BASS_BALANCED, BASS_SUB, BASS_PUNCHY, BASS_WARM") == 1 and len(presets.BASS_TYPES) == 4,
+      "bass types mirror the engine voicings")
+check(all(0 <= p[2].get("bass_type", 0) < 4 for p in presets.PROFILES.values()), "profiles use valid bass types")
+
+# updater
+check(updater.version_tuple("v2.10.0") > updater.version_tuple("2.9.9") > updater.version_tuple("2.9"),
+      "release versions compare numerically")
+check(updater.install_kind() == "source", "a git checkout is never overwritten by the updater")
+check(updater.FREQ_DAYS == {"manual": 0, "weekly": 7, "monthly": 30}, "update schedules")
+
 if "--net" in sys.argv:
     idx = correction.autoeq_index(max_age_days=0)
     hits = correction.autoeq_search(idx, "hd 650")
@@ -94,6 +106,9 @@ if "--net" in sys.argv:
     v = correction.parse_vdc(real, 48000)
     ok = all(abs(b["a2"]) < 1 for b in v)
     check(len(v) > 3 and ok, f"real JamesDSP DDC file: {len(v)} stable biquads")
+    rel = updater.check()
+    check(rel["tag"].startswith("v") and rel["tarball"].startswith("https://api.github.com/repos/noble6/resona/"),
+          f"latest GitHub release found: {rel['tag']} (running {__version__})")
 
 print("ALL PASSED" if not fails else f"FAILED ({fails})")
 sys.exit(1 if fails else 0)

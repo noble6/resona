@@ -65,7 +65,32 @@ static const float DEFAULTS[P_COUNT] = {
     [P_IEQ_AMT] = 0.5f, [P_TUBE_DRIVE] = 0.3f,
     [P_HRTF_ANGLE] = 30, [P_HRTF_AMT] = 1.0f,
     [P_UPMIX_ON] = 1, [P_UPMIX_CENTER] = 0.7f, [P_UPMIX_SURR] = 0.6f, [P_UPMIX_LFE] = 0.5f,
-    [P_LAYOUT] = 0,
+    [P_LAYOUT] = 0, [P_BASS_TYPE] = 0,
+};
+
+enum { BQ_PEAK, BQ_LSHELF, BQ_HSHELF, BQ_LP, BQ_HP, BQ_BP, BQ_AP };
+
+/*
+ * DeepBass voicings. Each one sets how real low end (filter) and psychoacoustic
+ * harmonics are blended, and whether transients get extra kick.
+ */
+enum { BASS_BALANCED, BASS_SUB, BASS_PUNCHY, BASS_WARM, BASS_NTYPES };
+typedef struct {
+    int   filt;        /* BQ_LSHELF or BQ_PEAK */
+    float f_mul, f_min, f_max, q, gain_db;  /* boost filter, relative to the bass frequency */
+    float even, odd, harm;                  /* harmonic generator weights and level */
+    float kick;                             /* transient emphasis on the low band */
+    float mud_db;                           /* low-mid cleanup at ~280 Hz */
+} bass_voice;
+static const bass_voice BASS_VOICES[BASS_NTYPES] = {
+    /* balanced: shelf plus even/odd harmonics, the original DeepBass */
+    {BQ_LSHELF, 1.0f, 40, 250, 0.7071f, 9.0f, 0.65f, 0.45f, 1.0f, 0.0f, 0.0f},
+    /* sub boost: real energy down at 35-60 Hz, few harmonics */
+    {BQ_PEAK,   0.5f, 35, 90,  1.0f,   11.0f, 0.45f, 0.30f, 0.6f, 0.0f, 0.0f},
+    /* punchy: tight mid-bass bump, odd harmonics for bite, transient kick, less mud */
+    {BQ_PEAK,   0.9f, 60, 140, 1.2f,    7.0f, 0.45f, 0.70f, 1.0f, 1.0f, -3.0f},
+    /* warm: broad low shelf reaching into the low mids, mostly 2nd harmonic */
+    {BQ_LSHELF, 2.0f, 80, 320, 0.55f,   7.0f, 0.95f, 0.15f, 1.1f, 0.0f, 0.0f},
 };
 
 /* ------------------------------------------------------------------ */
@@ -82,7 +107,6 @@ static inline float bq(const bq_c *c, bq_s *s, float x)
     return y;
 }
 
-enum { BQ_PEAK, BQ_LSHELF, BQ_HSHELF, BQ_LP, BQ_HP, BQ_BP, BQ_AP };
 
 static void bq_design(bq_c *c, int type, double fs, double f, double q, double gdb)
 {
@@ -212,7 +236,8 @@ typedef struct {
     float tube_dc_x[2], tube_dc_y[2], tube_dc_a;
     /* bass */
     bq_c bs_lp, bs_hp, bs_lp5, bs_shelf; bq_s bs_lp_s[2], bs_hp_s[2], bs_lp5_s, bs_shelf_s[2];
-    float bs_env, bs_att, bs_rel, bs_applied_f, bs_applied_p;
+    float bs_env, bs_att, bs_rel, bs_applied_f, bs_applied_p; int bs_applied_t;
+    bq_c bs_mud; bq_s bs_mud_s[2], bs_kick_s; float bs_fast, bs_slow, bs_fa, bs_fr, bs_sa, bs_sr, bs_kick_g, bs_applied_m;
     /* clarity */
     bq_c cl_hp, cl_hp2, cl_air; bq_s cl_hp_s[2], cl_hp2_s[2], cl_air_s[2];
     float cl_env[2], cl_att, cl_rel, cl_applied;
@@ -474,6 +499,9 @@ static void control(Resona *r, unsigned len)
 
     float bf = p[P_BASS_FREQ];
     float punch = clampf(p[P_BASS_ON], 0, 1) * clampf(p[P_BASS_PUNCH], 0, 1);
+    int bt = (int)clampf(p[P_BASS_TYPE], 0, BASS_NTYPES - 1);
+    const bass_voice *bv = &BASS_VOICES[bt];
+    if (bt != r->bs_applied_t) { r->bs_applied_t = bt; r->bs_applied_p = -1; r->bs_applied_m = -1; }
     if (bf != r->bs_applied_f) {
         bq_design(&r->bs_lp, BQ_LP, r->fs, bf, 0.7071, 0);
         bq_design(&r->bs_hp, BQ_HP, r->fs, bf, 0.7071, 0);
@@ -482,8 +510,14 @@ static void control(Resona *r, unsigned len)
         r->bs_applied_p = -1;
     }
     if (fabsf(punch - r->bs_applied_p) > 0.002f) {
-        bq_design(&r->bs_shelf, BQ_LSHELF, r->fs, bf, 0.7071, punch * 9.0);
+        bq_design(&r->bs_shelf, bv->filt, r->fs, clampf(bf * bv->f_mul, bv->f_min, bv->f_max), bv->q,
+                  punch * bv->gain_db);
         r->bs_applied_p = punch;
+    }
+    float mud = clampf(p[P_BASS_ON], 0, 1) * clampf(p[P_BASS_AMT], 0, 1) * bv->mud_db;
+    if (fabsf(mud - r->bs_applied_m) > 0.01f) {
+        bq_design(&r->bs_mud, BQ_PEAK, r->fs, 280, 1.0, mud);
+        r->bs_applied_m = mud;
     }
 
     float cl = clampf(p[P_CLAR_ON], 0, 1) * clampf(p[P_CLAR_AMT], 0, 1);
@@ -509,6 +543,8 @@ static void reset_state(Resona *r)
     memset(r->tube_dc_x, 0, sizeof r->tube_dc_x); memset(r->tube_dc_y, 0, sizeof r->tube_dc_y);
     memset(r->bs_lp_s, 0, sizeof r->bs_lp_s); memset(r->bs_hp_s, 0, sizeof r->bs_hp_s);
     memset(&r->bs_lp5_s, 0, sizeof r->bs_lp5_s); memset(r->bs_shelf_s, 0, sizeof r->bs_shelf_s);
+    memset(r->bs_mud_s, 0, sizeof r->bs_mud_s); memset(&r->bs_kick_s, 0, sizeof r->bs_kick_s);
+    r->bs_fast = r->bs_slow = 0; r->bs_kick_g = 0;
     memset(r->cl_hp_s, 0, sizeof r->cl_hp_s); memset(r->cl_hp2_s, 0, sizeof r->cl_hp2_s);
     memset(r->cl_air_s, 0, sizeof r->cl_air_s);
     memset(r->hr_s, 0, sizeof r->hr_s); memset(r->hr_eq_s, 0, sizeof r->hr_eq_s);
@@ -566,6 +602,8 @@ static LADSPA_Handle instantiate_n(unsigned long rate, unsigned nout)
     }
     r->tube_dc_a = 1.0f - op_coef(r->fs, 8);
     r->bs_att = tc_coef(r->fs, 0.002, 1); r->bs_rel = tc_coef(r->fs, 0.06, 1);
+    r->bs_fa = tc_coef(r->fs, 0.0008, 1); r->bs_fr = tc_coef(r->fs, 0.03, 1);
+    r->bs_sa = tc_coef(r->fs, 0.04, 1); r->bs_sr = tc_coef(r->fs, 0.25, 1);
     r->cl_att = tc_coef(r->fs, 0.001, 1); r->cl_rel = tc_coef(r->fs, 0.03, 1);
     bq_design(&r->cl_hp, BQ_HP, r->fs, 3000, 0.7071, 0);
     bq_design(&r->cl_hp2, BQ_HP, r->fs, 4500, 0.7071, 0);
@@ -603,6 +641,7 @@ static LADSPA_Handle instantiate_n(unsigned long rate, unsigned nout)
     r->lim_rel = tc_coef(r->fs, 0.08, 1);
 
     r->ld_applied = -1; r->vo_applied = -1; r->bs_applied_f = -1; r->bs_applied_p = -1;
+    r->bs_applied_t = -1; r->bs_applied_m = -1; r->bs_kick_g = 0;
     r->cl_applied = -1; r->fdn_applied_size = -1; r->hr_applied_angle = -100;
     update_fdn_geometry(r, DEFAULTS[P_AMB_SIZE], DEFAULTS[P_AMB_DAMP]);
     update_hrtf(r, DEFAULTS[P_HRTF_ANGLE]);
@@ -653,7 +692,10 @@ static void run(LADSPA_Handle h, unsigned long n)
         float tube = clampf(p[P_TUBE_ON], 0, 1) * clampf(p[P_TUBE_DRIVE], 0, 1);
         float tube_d = 1.0f + 5.0f * tube, tube_b = 0.18f;
         float tube_t0 = tanhf(tube_d * tube_b), tube_norm = 1.0f / (tube_d * (1.0f - tube_t0 * tube_t0));
-        float bass_h = clampf(p[P_BASS_ON], 0, 1) * clampf(p[P_BASS_AMT], 0, 1) * 1.8f;
+        const bass_voice *bv = &BASS_VOICES[r->bs_applied_t < 0 ? 0 : r->bs_applied_t];
+        float bass_on = clampf(p[P_BASS_ON], 0, 1) * clampf(p[P_BASS_AMT], 0, 1);
+        float bass_h = bass_on * 1.8f * bv->harm;
+        float kick = bass_on * bv->kick * clampf(p[P_BASS_PUNCH] * 1.5f + 0.4f, 0, 1.5f);
         float cl = r->cl_applied;
         float st_on = clampf(p[P_STAGE_ON], 0, 1);
         float width = 1.0f + (clampf(p[P_STAGE_WIDTH], 0, 2) - 1.0f) * st_on;
@@ -745,13 +787,31 @@ static void run(LADSPA_Handle h, unsigned long n)
                 L = bq(&r->bs_shelf, &r->bs_shelf_s[0], L);
                 R = bq(&r->bs_shelf, &r->bs_shelf_s[1], R);
             }
+            if (fabsf(r->bs_applied_m) > 0.01f) {
+                L = bq(&r->bs_mud, &r->bs_mud_s[0], L);
+                R = bq(&r->bs_mud, &r->bs_mud_s[1], R);
+            }
+            if (kick > 0.001f) {
+                /* transient kick: a 12 dB/oct low band (never cancels the dry signal) is pushed up
+                   while the fast envelope runs ahead of the slow one, i.e. on drum hits */
+                float lo1 = bq(&r->bs_lp, &r->bs_kick_s, 0.5f * (L + R));
+                float a = fabsf(lo1);
+                r->bs_fast += (a - r->bs_fast) * (a > r->bs_fast ? r->bs_fa : r->bs_fr);
+                r->bs_slow += (a - r->bs_slow) * (a > r->bs_slow ? r->bs_sa : r->bs_sr);
+                float t = clampf(r->bs_fast / (r->bs_slow + 1e-6f) - 1.0f, 0, 2.0f);
+                float g = t * kick * 0.7f;
+                r->bs_kick_g += (g - r->bs_kick_g) * 0.01f;
+                L += lo1 * r->bs_kick_g; R += lo1 * r->bs_kick_g;
+            } else if (r->bs_kick_g != 0) {
+                r->bs_kick_g = 0; r->bs_fast = r->bs_slow = 0;
+            }
             if (bass_h > 0.001f) {
                 float mono = 0.5f * (L + R);
                 float lo = bq(&r->bs_lp, &r->bs_lp_s[1], bq(&r->bs_lp, &r->bs_lp_s[0], mono));
                 float a = fabsf(lo);
                 r->bs_env += (a - r->bs_env) * (a > r->bs_env ? r->bs_att : r->bs_rel);
                 float nrm = clampf(lo / (r->bs_env + 1e-5f), -1.5f, 1.5f);
-                float shaped = r->bs_env * (0.65f * fabsf(nrm) + 0.45f * nrm * nrm * nrm);
+                float shaped = r->bs_env * (bv->even * fabsf(nrm) + bv->odd * nrm * nrm * nrm);
                 float hh = bq(&r->bs_hp, &r->bs_hp_s[1], bq(&r->bs_hp, &r->bs_hp_s[0], shaped));
                 hh = bq(&r->bs_lp5, &r->bs_lp5_s, hh) * bass_h;
                 L += hh; R += hh;

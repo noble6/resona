@@ -7,7 +7,7 @@ Resona adds a virtual "Resona Sound" output to PipeWire. All desktop audio passe
 ## What it does
 - One-click sound profiles (Dynamic, Music, Movie, Gaming, Voice, Night, Pure) with device modes (headphones, speakers, laptop)
 - Spatial HRTF: binaural virtual speakers for headphones (Brown–Duda structural head model), no IR file needed
-- DeepBass: psychoacoustic missing-fundamental bass for small and laptop speakers
+- DeepBass: psychoacoustic missing-fundamental bass for small and laptop speakers, with Balanced, Sub Boost, Punchy and Warm bass types (like the bass modes in Dolby apps on Android)
 - Intelligent EQ: content-adaptive tonal balance (Balanced/Warm/Focused/Bright), similar in spirit to Dolby's Intelligent Equalizer
 - Smart Leveler (volume-aware AGC), Adaptive Loudness (equal-loudness compensation), Voice Focus (dialogue enhancer), Clarity exciter, Tube Warmth, 3D Stage, crossfeed, ambience reverb, lookahead limiter, 10-band EQ
 - Headphone correction: built-in search of the AutoEq database (~8,800 headphones); imports EqualizerAPO/AutoEq ParametricEQ.txt and ViPER4Android DDC (.vdc) files
@@ -15,6 +15,7 @@ Resona adds a virtual "Resona Sound" output to PipeWire. All desktop audio passe
 - Stereo → 5.1/7.1 surround upmix for HDMI AV receivers, analog 5.1 and S/PDIF optical Dolby Digital (AC3)
 - Hardware detection: sound cards, codecs (e.g. Realtek ALC), jacks, HDMI display audio capabilities (ELD), output-mode switching, Hi-Res native sample rates (44.1–192 kHz), studio resampler, Bluetooth codec switching (LDAC/aptX/AAC)
 - Per-device memory, per-app automatic profiles, presets (JSON), tray, follows output switching
+- Built-in updater that installs new GitHub releases on demand, weekly or monthly
 
 ## Install
 git clone https://github.com/noble6/resona && cd resona && ./install.sh

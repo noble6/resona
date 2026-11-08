@@ -13,4 +13,10 @@
   <launchable type="desktop-id">resona.desktop</launchable>
   <categories><category>Audio</category></categories>
   <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="2.1.0" date="2026-11-08">
+      <description><p>DeepBass bass types (Balanced, Sub Boost, Punchy, Warm) and a built-in updater.</p></description>
+    </release>
+    <release version="2.0.0" date="2026-11-08"/>
+  </releases>
 </component>
