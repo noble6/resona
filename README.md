@@ -10,7 +10,7 @@ Spatial audio, psychoacoustic bass, Intelligent EQ, headphone correction for abo
 surround upmixing for HDMI and optical, and Hi-Res playback, all in one native PipeWire engine<br>
 with a Material 3 Expressive interface.
 
-[![CI](https://github.com/OWNER/resona/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/resona/actions/workflows/ci.yml)
+[![CI](https://github.com/noble6/resona/actions/workflows/ci.yml/badge.svg)](https://github.com/noble6/resona/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-GPL--3.0-8B5CF6)
 ![PipeWire](https://img.shields.io/badge/PipeWire-native-22D3B6)
 ![DSP](https://img.shields.io/badge/DSP-C%20%C2%B7%20lock--free-FF5E7E)
@@ -95,7 +95,7 @@ EasyEffects is still the right tool if you want an arbitrary plugin rack. Resona
 ## 🚀 Install
 
 ```sh
-git clone https://github.com/OWNER/resona && cd resona
+git clone https://github.com/noble6/resona && cd resona
 ./install.sh          # installs into ~/.local, no root needed
 resona                # or open "Resona" from your app menu
 ```
