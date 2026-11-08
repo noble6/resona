@@ -1,0 +1,8 @@
+name: Feature / DSP idea
+description: Suggest a profile, effect or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes: { label: The idea, description: "What should it do? Links to papers or references are welcome." }
+    validations: { required: true }

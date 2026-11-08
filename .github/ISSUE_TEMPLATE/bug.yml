@@ -1,0 +1,17 @@
+name: Bug report
+description: Something sounds or behaves wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: What happened?, description: "What did you expect instead?" }
+    validations: { required: true }
+  - type: input
+    id: distro
+    attributes: { label: Distro + PipeWire version, placeholder: "Arch, PipeWire 1.6.x" }
+  - type: textarea
+    id: hw
+    attributes: { label: Hardware, description: "Paste the cards from the Hardware page, or `pactl list cards short`" }
+  - type: textarea
+    id: log
+    attributes: { label: Engine log, description: "`$XDG_RUNTIME_DIR/resona/resona_sink.log`", render: text }

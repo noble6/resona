@@ -1,0 +1,24 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: { cc: [gcc, clang] }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build DSP engine (${{ matrix.cc }}, warnings are errors)
+        run: make -C engine CC=${{ matrix.cc }} CFLAGS="-O2 -ffast-math -fno-finite-math-only -Werror"
+      - name: DSP test suite (44.1/48/96/192 kHz)
+        run: make -C engine test CC=${{ matrix.cc }}
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install numpy PySide6
+      - name: Compile check
+        run: python -m py_compile app/main.py app/resona/*.py tests/*.py
+      - name: Unit tests
+        run: python tests/test_units.py

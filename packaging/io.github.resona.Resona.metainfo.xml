@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.resona.Resona</id>
+  <name>Resona</name>
+  <summary>The sound enhancer Linux never had</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <description>
+    <p>Resona adds system-wide spatial audio, psychoacoustic bass, Intelligent EQ, AutoEq headphone
+    correction, a convolver, and stereo-to-5.1/7.1 upmixing to PipeWire through a native, lock-free
+    DSP engine with a Material 3 Expressive interface.</p>
+  </description>
+  <launchable type="desktop-id">resona.desktop</launchable>
+  <categories><category>Audio</category></categories>
+  <content_rating type="oars-1.1"/>
+</component>

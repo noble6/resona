@@ -1,0 +1,4 @@
+__pycache__/
+*.so
+tests/test_dsp
+*.pyc

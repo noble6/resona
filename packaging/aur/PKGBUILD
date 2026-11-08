@@ -1,0 +1,42 @@
+# Maintainer: noble6 <148613961+noble6@users.noreply.github.com>
+pkgname=resona-git
+pkgver=2.0.0
+pkgrel=1
+pkgdesc="Spatial audio, psychoacoustic bass, Intelligent EQ, AutoEq correction and surround upmix for PipeWire"
+arch=('x86_64' 'aarch64')
+url="https://github.com/noble6/resona"
+license=('GPL-3.0-or-later')
+depends=('pipewire' 'pipewire-pulse' 'wireplumber' 'pyside6' 'python-numpy' 'qt6-declarative')
+makedepends=('git' 'gcc' 'make')
+provides=('resona')
+conflicts=('resona')
+source=("git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd resona
+  printf "2.0.0.r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  make -C resona/engine CFLAGS="$CFLAGS -ffast-math -fno-finite-math-only"
+}
+
+check() {
+  make -C resona/engine test
+}
+
+package() {
+  cd resona
+  install -Dm755 engine/resona.so "$pkgdir/usr/lib/resona/resona.so"
+  install -dm755 "$pkgdir/usr/share/resona"
+  cp -r app/main.py app/resona app/qml app/fonts app/icons "$pkgdir/usr/share/resona/"
+  install -Dm755 /dev/stdin "$pkgdir/usr/bin/resona" <<SH
+#!/bin/sh
+export RESONA_PLUGIN=/usr/lib/resona/resona.so
+exec python3 /usr/share/resona/main.py "\$@"
+SH
+  install -Dm644 app/icons/resona.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/resona.svg"
+  install -Dm644 packaging/resona.desktop "$pkgdir/usr/share/applications/resona.desktop"
+  install -Dm644 packaging/io.github.resona.Resona.metainfo.xml "$pkgdir/usr/share/metainfo/io.github.resona.Resona.metainfo.xml"
+}
