@@ -84,3 +84,5 @@ finally:
         pipeline.set_default_sink(original)
     check(not pipeline.sink_exists(pipeline.SINK_NAME), "virtual sink removed on quit")
     print("ALL PASSED" if not fails else f"FAILED ({fails})")
+
+sys.exit(1 if fails else 0)
