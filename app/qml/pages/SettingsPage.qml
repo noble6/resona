@@ -152,7 +152,7 @@ Page {
 
     Card {
         width: parent.width
-        height: 210
+        height: 260
         ColumnLayout {
             anchors.fill: parent; anchors.margins: 28
             spacing: 18
@@ -163,6 +163,12 @@ Page {
                     Label { text: "The whole interface re-tones from one seed"; role: "body"; color: Theme.inkVariant } }
                 Label { text: "Dark"; role: "labelL"; color: Theme.inkVariant }
                 M3Switch { Accessible.name: "Dark theme"; checked: audio.dark; onToggled: (v) => audio.setDark(v) }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Label { text: "Reduce decorative motion"; role: "bodyL"; Layout.fillWidth: true }
+                M3Switch { Accessible.name: "Reduce decorative motion"; checked: audio.reducedMotion
+                           onToggled: (v) => audio.setReducedMotion(v) }
             }
             Row {
                 spacing: 14

@@ -42,9 +42,10 @@ QtObject {
     readonly property color inverseOnSurface: pick(tone(h, 0.12, 15), tone(h, 0.12, 95))
 
     // motion (M3 expressive springs, approximated)
-    readonly property int fast: 200
-    readonly property int medium: 380
-    readonly property int slow: 560
+    readonly property bool reducedMotion: audio ? audio.reducedMotion : false
+    readonly property int fast: reducedMotion ? 0 : 200
+    readonly property int medium: reducedMotion ? 0 : 380
+    readonly property int slow: reducedMotion ? 0 : 560
     readonly property var spatial: Easing.OutBack
     readonly property real overshoot: 1.25
 

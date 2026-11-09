@@ -61,5 +61,14 @@ class CorrectionTests(unittest.TestCase):
         controller.shm.write.assert_called_with({"corr_on": 1})
 
 
+class AppearanceTests(unittest.TestCase):
+    def test_reduced_motion_is_saved_and_notified(self):
+        controller = SimpleNamespace(_state={}, stateChanged=SimpleNamespace(emit=Mock()), _touch=Mock())
+        Backend.setReducedMotion(controller, True)
+        self.assertTrue(controller._state["reduced_motion"])
+        controller.stateChanged.emit.assert_called_once_with()
+        controller._touch.assert_called_once_with()
+
+
 if __name__ == "__main__":
     unittest.main()
