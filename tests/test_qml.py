@@ -74,6 +74,18 @@ class KeyboardTests(unittest.TestCase):
         self.assertEqual(item.property("current"), "Two")
         self.assertEqual(self.window.property("activations"), 1)
 
+    def test_slider_arrows_and_range_keys(self):
+        item = self.load('WavySlider { objectName: "control"; stepSize: 0.1; '
+                         'onMoved: (next) => value = next }')
+        QTest.keyClick(self.window, Qt.Key.Key_Right)
+        self.assertAlmostEqual(item.property("value"), 0.6)
+        QTest.keyClick(self.window, Qt.Key.Key_Home)
+        self.assertEqual(item.property("value"), 0)
+        QTest.keyClick(self.window, Qt.Key.Key_Left)
+        self.assertEqual(item.property("value"), 0)
+        QTest.keyClick(self.window, Qt.Key.Key_End)
+        self.assertEqual(item.property("value"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
