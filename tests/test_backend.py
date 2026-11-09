@@ -44,5 +44,22 @@ class UpdateTests(unittest.TestCase):
             controller._try_restart.assert_called_once_with(force=not automatic)
 
 
+class CorrectionTests(unittest.TestCase):
+    def test_ddc_is_bypassed_at_unsupported_rate_and_restored_at_supported_rate(self):
+        controller = SimpleNamespace(
+            _state={"correction": {"kind": "vdc", "text": "SR_48000:1,0,0,0,0", "filters": []}},
+            _params={"corr_on": 1},
+            shm=SimpleNamespace(sample_rate=96000, write_corr=Mock(), write=Mock()),
+            toast=SimpleNamespace(emit=Mock()), correctionChanged=SimpleNamespace(emit=Mock()),
+        )
+        Backend._push_correction(controller)
+        controller.shm.write_corr.assert_called_with([])
+        controller.shm.write.assert_called_with({"corr_on": 0})
+        controller.shm.sample_rate = 48000
+        Backend._push_correction(controller)
+        self.assertEqual(len(controller.shm.write_corr.call_args.args[0]), 1)
+        controller.shm.write.assert_called_with({"corr_on": 1})
+
+
 if __name__ == "__main__":
     unittest.main()

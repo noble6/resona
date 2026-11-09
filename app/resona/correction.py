@@ -97,7 +97,7 @@ def parse_parametric(text: str) -> tuple[float, list[dict]]:
 
 # ---------------------------------------------------------------- ViPER DDC
 def parse_vdc(text: str, fs: int) -> list[dict]:
-    """Biquads from a ViPER-DDC file for the closest available rate.
+    """Biquads from a ViPER-DDC file for the exact playback rate.
     File order per section: b0 b1 b2 a1 a2 with a1/a2 stored negated (JamesDSP vdc.c)."""
     sections = {}
     for m in re.finditer(r"SR_(\d+)\s*:\s*([-\d.,eE+\s]+)", text):
@@ -105,8 +105,11 @@ def parse_vdc(text: str, fs: int) -> list[dict]:
         sections[int(m.group(1))] = vals
     if not sections:
         raise ValueError("no SR_44100 / SR_48000 section found")
-    rate = min(sections, key=lambda r: abs(r - fs))
-    v = sections[rate]
+    if fs not in sections:
+        raise ValueError(f"DDC has no {fs} Hz section")
+    v = sections[fs]
+    if not v or len(v) % 5:
+        raise ValueError("incomplete DDC biquad section")
     out = []
     for i in range(0, len(v) - 4, 5):
         b0, b1, b2, a1, a2 = v[i:i + 5]

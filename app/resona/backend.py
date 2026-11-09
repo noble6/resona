@@ -566,14 +566,17 @@ class Backend(QObject):
     def _push_correction(self):
         c = self._state.get("correction") or {}
         filters = c.get("filters", [])
-        self.shm.write_corr(filters)
         fs = self.shm.sample_rate
+        self._corr_rate = fs
+        enabled = self._params.get("corr_on", 0)
         if c.get("kind") == "vdc" and c.get("text"):
             try:
                 filters = correction.parse_vdc(c["text"], fs)
-                self.shm.write_corr(filters)
-            except ValueError:
-                pass
+            except ValueError as e:
+                filters, enabled = [], 0
+                self.toast.emit(f"{e}; correction bypassed")
+        self.shm.write_corr(filters)
+        self.shm.write({"corr_on": enabled})
         self._corr_curve = correction.response_db(filters, CURVE_FREQS, fs, c.get("preamp", 0)).round(2).tolist() \
             if filters else [0.0] * len(CURVE_FREQS)
         self.correctionChanged.emit()
@@ -812,6 +815,9 @@ class Backend(QObject):
 
     def _tick(self):
         self._ticks += 1
+        if self.shm.sample_rate != self._corr_rate:
+            self._push_correction()
+            self.stateChanged.emit()
         hb = self.shm.heartbeat
         now = time.monotonic()
         if hb != self._last_hb:
@@ -884,6 +890,8 @@ class Backend(QObject):
             return
         self._params[name] = value
         self.shm.write({name: value})
+        if name == "corr_on":
+            self._push_correction()
         if name.startswith("eq"):
             self._recompute_curve()
         if name in presets.SOUND_KEYS and name not in ("preamp", "output") and not self._state.get("modified"):
@@ -906,6 +914,8 @@ class Backend(QObject):
     def _apply(self, values: dict):
         self._params.update(values)
         self.shm.write(values)
+        if "corr_on" in values:
+            self._push_correction()
         self._recompute_curve()
         self.paramsChanged.emit()
         self._touch()

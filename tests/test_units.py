@@ -69,8 +69,12 @@ check(abs(r[0] - 6) < 0.01, f"response math matches RBJ peak (+{r[0]:.2f} dB)")
 vdc = "SR_44100:1.0,2.0,1.0,0.5,-0.25\nSR_48000:0.9,0.1,0.0,0.4,-0.2,1,0,0,0,0"
 v = correction.parse_vdc(vdc, 48000)
 check(len(v) == 2 and v[0]["a1"] == -0.4 and v[0]["a2"] == 0.2, "DDC parser picks the 48 kHz set and flips a1/a2")
-v = correction.parse_vdc(vdc, 96000)
-check(v[0]["b0"] == 0.9, "DDC for 96 kHz falls back to the closest (48 kHz) set")
+try:
+    correction.parse_vdc(vdc, 96000)
+except ValueError:
+    check(True, "DDC rejects unsupported sample rates rather than shifting its frequency response")
+else:
+    check(False, "DDC must reject unsupported sample rates")
 check(correction.safe_preamp([{"type": "PK", "freq": 100, "gain": 8, "q": 1}]) == -8.0, "safe preamp prevents clipping")
 
 # IR reader: 24-bit stereo PCM
