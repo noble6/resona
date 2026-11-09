@@ -31,8 +31,8 @@ jobs:
           python tests/test_shm.py
           python tests/test_validation.py
           python tests/test_desktop.py
-          python tests/test_qml.py
-          python tests/test_ipc.py
+          PYTHONPATH=tests python -m unittest test_ipc test_qml
+          PYTHONPATH=tests python -m unittest test_qml test_ipc
   sanitizers:
     runs-on: ubuntu-latest
     steps:

@@ -4,11 +4,12 @@ import unittest
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication
 
 COMPONENTS = (Path(__file__).resolve().parents[1] / "app/qml/components").as_uri()
 
@@ -16,7 +17,10 @@ COMPONENTS = (Path(__file__).resolve().parents[1] / "app/qml/components").as_uri
 class KeyboardTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = QGuiApplication.instance() or QGuiApplication([])
+        app = QCoreApplication.instance()
+        if app is not None and not isinstance(app, QGuiApplication):
+            raise RuntimeError("QML tests need a GUI application; run them in a separate process")
+        cls.app = app or QApplication([])
 
     def load(self, control):
         self.engine = QQmlApplicationEngine()
