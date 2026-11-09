@@ -27,7 +27,7 @@ Page {
                     width: 10; height: 10; radius: 5
                     anchors.verticalCenter: parent.verticalCenter
                     color: audio.processing ? "#4ADE80" : audio.running ? Theme.secondary : Theme.error
-                    SequentialAnimation on opacity { running: audio.processing; loops: Animation.Infinite
+                    SequentialAnimation on opacity { running: audio.processing && !Theme.reducedMotion; loops: Animation.Infinite
                         NumberAnimation { to: 0.35; duration: 700 } NumberAnimation { to: 1; duration: 700 } }
                 }
                 Label { text: audio.status + (audio.running ? "  ·  " + (audio.sampleRate / 1000) + " kHz  ·  " + page.outputDesc : "")

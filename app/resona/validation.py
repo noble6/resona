@@ -73,7 +73,7 @@ def snapshot(data):
 
 def state(data):
     result = snapshot(data)
-    for key in ("app_auto", "capture_all", "per_device", "follow", "dark", "update_auto"):
+    for key in ("app_auto", "capture_all", "per_device", "follow", "dark", "update_auto", "reduced_motion"):
         if key in data and not isinstance(data[key], bool):
             raise ValueError(f"{key} must be a boolean")
     for key in ("output", "last_target", "accent"):

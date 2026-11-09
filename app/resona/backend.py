@@ -985,6 +985,16 @@ class Backend(QObject):
     def setVisualsActive(self, on: bool):
         self._visuals = on
 
+    @Property(bool, notify=stateChanged)
+    def reducedMotion(self):
+        return self._state.get("reduced_motion", False)
+
+    @Slot(bool)
+    def setReducedMotion(self, on: bool):
+        self._state["reduced_motion"] = on
+        self.stateChanged.emit()
+        self._touch()
+
     # ------------------------------------------------------------------ updates
     def _set_upd(self, **kw):
         self._upd.update(kw)

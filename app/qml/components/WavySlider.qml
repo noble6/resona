@@ -48,7 +48,7 @@ Item {
     // a short active span stays flat: a partial ripple next to the handle reads as a glitch
     readonly property real span: Math.abs(frac - zeroFrac) * (width - 4) - gap - 6
     property real amp: (wavy && enabled) ? (mouse.pressed ? 2 : 3.2) * Math.max(0, Math.min(1, (span - wavelength) / wavelength)) : 0
-    Behavior on amp { NumberAnimation { duration: 320; easing.type: Easing.OutBack } }
+    Behavior on amp { NumberAnimation { duration: Theme.reducedMotion ? 0 : 320; easing.type: Easing.OutBack } }
     readonly property real wavelength: 26
 
     // inactive track, split around the handle
@@ -96,7 +96,7 @@ Item {
         preferredRendererType: Shape.GeometryRenderer
         NumberAnimation on phase {
             from: 0; to: Math.PI * 2; duration: 900
-            loops: Animation.Infinite; running: root.animated && root.amp > 0.05 && root.visible
+            loops: Animation.Infinite; running: root.animated && root.amp > 0.05 && root.visible && !Theme.reducedMotion
         }
         ShapePath {
             strokeColor: root.activeColor
