@@ -6,6 +6,18 @@ Rectangle {
     property bool selected: false
     property string icon: ""
     signal clicked()
+    activeFocusOnTab: true
+    Accessible.role: Accessible.Button
+    Accessible.name: text
+    Accessible.checkable: true
+    Accessible.checked: selected
+    Accessible.onPressAction: clicked()
+    Keys.onPressed: (event) => {
+        if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) < 0) return
+        event.accepted = true
+        if (!event.isAutoRepeat) clicked()
+    }
+    FocusRing {}
     height: 36
     width: row.implicitWidth + 28
     radius: selected ? 12 : 10
