@@ -62,6 +62,19 @@ Page {
             width: 300; height: parent.height
             MorphShape {
                 id: power
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Button
+                Accessible.name: "Effects"
+                Accessible.checkable: true
+                Accessible.checked: !!audio.params.enable
+                Accessible.onPressAction: audio.setEnabled(!audio.params.enable)
+                Keys.onShortcutOverride: (event) => { if (event.key === Qt.Key_Space) event.accepted = true }
+                Keys.onPressed: (event) => {
+                    if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) < 0) return
+                    event.accepted = true
+                    if (!event.isAutoRepeat) audio.setEnabled(!audio.params.enable)
+                }
+                FocusRing { radius: 100 }
                 anchors.centerIn: parent
                 anchors.verticalCenterOffset: -16
                 width: 196; height: 196
@@ -140,6 +153,20 @@ Page {
                 id: pc
                 required property var modelData
                 readonly property bool sel: audio.profile === modelData.name
+                activeFocusOnTab: true
+                Accessible.role: Accessible.RadioButton
+                Accessible.name: modelData.name
+                Accessible.description: modelData.desc
+                Accessible.checkable: true
+                Accessible.checked: sel
+                Accessible.onPressAction: audio.applyProfile(modelData.name)
+                Keys.onShortcutOverride: (event) => { if (event.key === Qt.Key_Space) event.accepted = true }
+                Keys.onPressed: (event) => {
+                    if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) < 0) return
+                    event.accepted = true
+                    if (!event.isAutoRepeat) audio.applyProfile(modelData.name)
+                }
+                FocusRing { radius: pc.radius + 3 }
                 Layout.fillWidth: true
                 Layout.preferredHeight: 168
                 radius: sel ? 40 : (pma2.pressed ? 20 : 28)
