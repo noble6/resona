@@ -31,5 +31,18 @@ class PresetTests(unittest.TestCase):
         controller.clearCorrection.assert_not_called()
 
 
+class UpdateTests(unittest.TestCase):
+    def test_only_manual_update_forces_restart(self):
+        for automatic in (False, True):
+            controller = SimpleNamespace(
+                _upd={"state": "available"}, _upd_info={"version": "9.0"},
+                _visuals=True, _processing=True, _set_upd=Mock(),
+                _restart_timer=SimpleNamespace(start=Mock()), _try_restart=Mock(),
+                _async=lambda work, done: done("/unused/resona"),
+            )
+            Backend.installUpdate(controller, automatic=automatic)
+            controller._try_restart.assert_called_once_with(force=not automatic)
+
+
 if __name__ == "__main__":
     unittest.main()
