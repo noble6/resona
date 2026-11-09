@@ -7,6 +7,7 @@ import os
 import re
 import signal
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -231,6 +232,7 @@ class Pipeline:
         self.sink_name = sink_name
         self.out_name = out_name
         self.proc: subprocess.Popen | None = None
+        self._routing_lock = threading.Lock()
         self.target: str | None = None
         self.previous_default: str | None = None
         self.layout: dict | None = None
@@ -260,40 +262,45 @@ class Pipeline:
 
     def wait_ready(self, make_default: bool = True, timeout: float = 4.0) -> bool:
         """Block until the virtual sink exists; safe to call from any thread."""
+        proc = self.proc
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if not self.running:
+            if proc is None or self.proc is not proc or proc.poll() is not None:
                 return False
             if sink_exists(self.sink_name):
                 break
             time.sleep(0.1)
         else:
             return False
-        if make_default:
-            cur = default_sink()
-            if cur and cur != self.sink_name:
-                self.previous_default = cur
-            set_default_sink(self.sink_name)
-        return True
+        with self._routing_lock:
+            if self.proc is not proc or proc.poll() is not None:
+                return False
+            if make_default:
+                cur = default_sink()
+                if cur and cur != self.sink_name:
+                    self.previous_default = cur
+                set_default_sink(self.sink_name)
+            return True
 
     def start(self, target: str | None, make_default: bool = True, timeout: float = 4.0) -> bool:
         self.spawn(target)
         return self.wait_ready(make_default, timeout)
 
     def stop(self, restore_default: bool = True) -> None:
-        if restore_default and default_sink() == self.sink_name:
-            fallback = self.target or self.previous_default  # the device actually in use
-            if fallback:
-                set_default_sink(fallback)
-        if self.proc is not None:
-            if self.proc.poll() is None:
-                self.proc.terminate()
-                try:
-                    self.proc.wait(2)
-                except subprocess.TimeoutExpired:
-                    self.proc.kill()
-                    self.proc.wait()
-            self.proc = None
+        with self._routing_lock:
+            if restore_default and default_sink() == self.sink_name:
+                fallback = self.target or self.previous_default  # the device actually in use
+                if fallback:
+                    set_default_sink(fallback)
+            if self.proc is not None:
+                if self.proc.poll() is None:
+                    self.proc.terminate()
+                    try:
+                        self.proc.wait(2)
+                    except subprocess.TimeoutExpired:
+                        self.proc.kill()
+                        self.proc.wait()
+                self.proc = None
 
     def last_log(self) -> str:
         try:
