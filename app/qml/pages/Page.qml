@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls.Basic
 import "../components"
 
@@ -13,6 +14,30 @@ Flickable {
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+    function revealFocus() {
+        const window = root.Window.window
+        const item = window ? window.activeFocusItem : null
+        if (!item || !root.visible || root.height <= 0) return
+        let ancestor = item
+        while (ancestor && ancestor !== root.contentItem) ancestor = ancestor.parent
+        if (!ancestor) return
+        const top = item.mapToItem(root.contentItem, 0, 0).y
+        const bottom = item.mapToItem(root.contentItem, 0, item.height).y
+        let next = root.contentY
+        if (top < next + 12) next = top - 12
+        else if (bottom > next + root.height - 12) next = bottom - root.height + 12
+        next = Math.max(root.originY, Math.min(root.originY + Math.max(0, root.contentHeight - root.height), next))
+        if (next !== root.contentY) {
+            root.cancelFlick()
+            root.contentY = next
+        }
+    }
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() { Qt.callLater(root.revealFocus) }
+    }
+    onHeightChanged: Qt.callLater(root.revealFocus)
 
     Item {
         id: header
