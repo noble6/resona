@@ -4,6 +4,18 @@ Item {
     id: root
     property bool checked: false
     signal toggled(bool on)
+    activeFocusOnTab: true
+    Accessible.role: Accessible.CheckBox
+    Accessible.checkable: true
+    Accessible.checked: checked
+    Accessible.onToggleAction: toggled(!checked)
+    Accessible.onPressAction: toggled(!checked)
+    Keys.onPressed: (event) => {
+        if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) < 0) return
+        event.accepted = true
+        if (!event.isAutoRepeat) toggled(!checked)
+    }
+    FocusRing { radius: 19 }
     implicitWidth: 52; implicitHeight: 32
     Rectangle {
         anchors.fill: parent
