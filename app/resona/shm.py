@@ -184,11 +184,12 @@ class SharedState:
     def close(self) -> None:
         # numpy views do not pin the mapping: drop them and refuse access before unmapping,
         # otherwise a late write after shutdown touches freed memory and segfaults
-        if self.closed:
-            return
-        self.closed = True
-        self.params = self.corr = self.ieq = self.ring_in = self.ring_out = None
-        try:
-            self.mm.close()
-        except (BufferError, ValueError):
-            pass
+        with self._write_lock:
+            if self.closed:
+                return
+            self.closed = True
+            self.params = self.corr = self.ieq = self.ring_in = self.ring_out = None
+            try:
+                self.mm.close()
+            except (BufferError, ValueError):
+                pass
