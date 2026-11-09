@@ -49,9 +49,11 @@ def main() -> int:
 
     if not shot_dir and already_running():
         return 0
-    server = QLocalServer()
-    QLocalServer.removeServer(APP_ID)
-    server.listen(APP_ID)
+    server = None
+    if not shot_dir:
+        server = QLocalServer()
+        QLocalServer.removeServer(APP_ID)
+        server.listen(APP_ID)
 
     fid = QFontDatabase.addApplicationFont(str(HERE / "fonts" / "RobotoFlex.ttf"))
     family = QFontDatabase.applicationFontFamilies(fid)[0] if fid >= 0 else "sans-serif"
@@ -83,7 +85,8 @@ def main() -> int:
     def on_conn():
         c = server.nextPendingConnection()
         c.readyRead.connect(show)
-    server.newConnection.connect(on_conn)
+    if server is not None:
+        server.newConnection.connect(on_conn)
 
     tray = None
     if QSystemTrayIcon.isSystemTrayAvailable() and not shot_dir:
