@@ -1,4 +1,6 @@
 __pycache__/
 *.so
 tests/test_dsp
+tests/test_hrtf
+tests/test_shm
 *.pyc
