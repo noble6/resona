@@ -64,6 +64,16 @@ class KeyboardTests(unittest.TestCase):
         QTest.keyClick(self.window, Qt.Key.Key_Space)
         self.assertEqual(self.window.property("activations"), 1)
 
+    def test_selection_menu_works_with_keyboard(self):
+        item = self.load('SelectButton { objectName: "control"; options: ["One", "Two"]; current: "One"; '
+                         'onPicked: (value) => { current = value; win.activations++ } }')
+        QTest.keyClick(self.window, Qt.Key.Key_Space)
+        QTest.qWait(20)
+        QTest.keyClick(self.window, Qt.Key.Key_Down)
+        QTest.keyClick(self.window, Qt.Key.Key_Return)
+        self.assertEqual(item.property("current"), "Two")
+        self.assertEqual(self.window.property("activations"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
