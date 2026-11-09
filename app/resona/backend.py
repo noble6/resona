@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import Property, QCoreApplication, QObject, QProcess, QTimer, QUrl, Signal, Slot
 
-from . import __version__, correction, hardware, pipeline, presets, updater
+from . import __version__, correction, hardware, pipeline, presets, updater, validation
 from .shm import SharedState
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "resona"
@@ -147,8 +147,8 @@ class Backend(QObject):
 
     def _load(self) -> dict:
         try:
-            return json.loads(STATE_FILE.read_text())
-        except (OSError, json.JSONDecodeError):
+            return validation.state(json.loads(STATE_FILE.read_text()))
+        except (OSError, ValueError):
             return {}
 
     def _save(self):
@@ -742,8 +742,9 @@ class Backend(QObject):
         self.toast.emit(f"Saved “{name.strip()}”")
 
     def _load_preset_data(self, data: dict, name: str):
-        if "params" not in data:
+        if not isinstance(data, dict) or "params" not in data:
             raise ValueError("not a Resona preset")
+        data = validation.snapshot(data)
         self._restore(data)
         if data.get("correction"):
             self._set_correction(data["correction"])
@@ -876,6 +877,10 @@ class Backend(QObject):
     @Slot(str, float)
     def setParam(self, name: str, value: float):
         if name not in presets.DEFAULTS or self._params.get(name) == value:
+            return
+        try:
+            validation.params({name: value})
+        except ValueError:
             return
         self._params[name] = value
         self.shm.write({name: value})
