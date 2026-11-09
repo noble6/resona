@@ -19,19 +19,27 @@ mkdir -p "$PREFIX/share/resona"
 cp -r app/main.py app/resona app/qml app/fonts app/icons "$PREFIX/share/resona/"
 find "$PREFIX/share/resona" -name __pycache__ -prune -exec rm -rf {} +
 
+launcher=$(python3 - "$PREFIX" <<'PY'
+import shlex
+import sys
+prefix = sys.argv[1]
+print("#!/bin/sh")
+print("export RESONA_PLUGIN=" + shlex.quote(prefix + "/lib/resona/resona.so"))
+print("exec python3 " + shlex.quote(prefix + "/share/resona/main.py") + ' "$@"')
+PY
+)
 install -Dm755 /dev/stdin "$PREFIX/bin/resona" <<SH
-#!/bin/sh
-export RESONA_PLUGIN="$PREFIX/lib/resona/resona.so"
-exec python3 "$PREFIX/share/resona/main.py" "\$@"
+$launcher
 SH
 install -Dm644 app/icons/resona.svg "$PREFIX/share/icons/hicolor/scalable/apps/resona.svg"
+desktop_exec=$(PYTHONPATH=app python3 -c 'import sys; from resona.desktop import exec_line; print(exec_line([sys.argv[1]]))' "$PREFIX/bin/resona")
 install -Dm644 /dev/stdin "$PREFIX/share/applications/resona.desktop" <<DESK
 [Desktop Entry]
 Type=Application
 Name=Resona
 GenericName=Sound Enhancer
 Comment=Spatial sound, DeepBass, smart EQ and loudness for PipeWire
-Exec=$PREFIX/bin/resona
+Exec=$desktop_exec
 Icon=resona
 Categories=AudioVideo;Audio;Mixer;
 Keywords=equalizer;eq;bass;dolby;dts;surround;spatial;audio;effects;pipewire;

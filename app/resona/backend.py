@@ -16,6 +16,7 @@ from PySide6.QtCore import Property, QCoreApplication, QObject, QProcess, QTimer
 
 from . import __version__, correction, hardware, pipeline, presets, updater, validation
 from .shm import SharedState
+from .desktop import exec_line
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "resona"
 STATE_FILE = CONFIG_DIR / "state.json"
@@ -1078,10 +1079,11 @@ class Backend(QObject):
             if on:
                 AUTOSTART.parent.mkdir(parents=True, exist_ok=True)
                 launcher = shutil.which("resona")
-                exe = launcher or f"{sys.executable} {Path(__file__).resolve().parents[1] / 'main.py'}"
+                args = [launcher] if launcher else [sys.executable, str(Path(__file__).resolve().parents[1] / "main.py")]
+                exe = exec_line(args + ["--hidden"])
                 AUTOSTART.write_text(
                     "[Desktop Entry]\nType=Application\nName=Resona\n"
-                    f"Exec={exe} --hidden\nIcon=resona\nX-GNOME-Autostart-enabled=true\n")
+                    f"Exec={exe}\nIcon=resona\nX-GNOME-Autostart-enabled=true\n")
             elif AUTOSTART.exists():
                 AUTOSTART.unlink()
         except OSError as e:
