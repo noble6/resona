@@ -267,6 +267,8 @@ typedef struct {
     float meter_in[2], meter_out[2];
 } Resona;
 
+_Static_assert(__atomic_always_lock_free(4, 0), "control snapshots require lock-free 32-bit atomics");
+
 /* ------------------------------------------------------------------ */
 /* shared memory                                                       */
 
@@ -275,6 +277,7 @@ static void shm_defaults(resona_shm_t *m)
     memset(m->params, 0, sizeof(m->params));
     memcpy(m->params, DEFAULTS, sizeof(DEFAULTS));
     m->corr_count = 0;
+    m->control_seq = 0;
     m->version = RESONA_VERSION;
     __atomic_store_n(&m->magic, RESONA_MAGIC, __ATOMIC_RELEASE);
 }
@@ -370,13 +373,12 @@ static void update_hrtf(Resona *r, float angle)
     r->hr_applied_angle = angle;
 }
 
-static void update_corr(Resona *r)
+static void update_corr(Resona *r, const resona_corr_t *sections, unsigned count)
 {
-    resona_shm_t *m = r->shm;
-    unsigned n = m->corr_count > NCORR ? NCORR : m->corr_count;
+    unsigned n = count > NCORR ? NCORR : count;
     int k = 0;
     for (unsigned i = 0; i < n; i++) {
-        resona_corr_t s = m->corr[i];
+        resona_corr_t s = sections[i];
         if (!isfinite(s.type) || s.type < CORR_PK || s.type > CORR_RAW || s.type != (int)s.type) continue;
         if (s.type != CORR_RAW && (!isfinite(s.freq) || s.freq <= 0 ||
             !isfinite(s.q) || s.q <= 0 || !isfinite(s.gain))) continue;
@@ -401,18 +403,36 @@ static void update_corr(Resona *r)
     r->corr_n = k;
 }
 
+static void read_controls(Resona *r)
+{
+    resona_shm_t *m = r->shm;
+    uint32_t guard = __atomic_load_n(&m->control_seq, __ATOMIC_SEQ_CST);
+    if (guard & 1u) return;
+    uint32_t seq = __atomic_load_n(&m->param_seq, __ATOMIC_RELAXED);
+    if (seq == r->last_seq && !r->first) return;
+    float params[P_COUNT];
+    resona_corr_t sections[NCORR];
+    unsigned count = __atomic_load_n(&m->corr_count, __ATOMIC_RELAXED);
+    if (count > NCORR) count = NCORR;
+    for (int i = 0; i < P_COUNT; i++) __atomic_load(&m->params[i], &params[i], __ATOMIC_RELAXED);
+    for (unsigned i = 0; i < count; i++) {
+#define READ_FIELD(field) __atomic_load(&m->corr[i].field, &sections[i].field, __ATOMIC_RELAXED)
+        READ_FIELD(type); READ_FIELD(freq); READ_FIELD(gain); READ_FIELD(q);
+        READ_FIELD(b0); READ_FIELD(b1); READ_FIELD(b2); READ_FIELD(a1); READ_FIELD(a2);
+#undef READ_FIELD
+        sections[i].pad = 0;
+    }
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+    if (__atomic_load_n(&m->control_seq, __ATOMIC_SEQ_CST) != guard) return;
+    r->last_seq = seq;
+    for (int i = 0; i < P_COUNT; i++) if (isfinite(params[i])) r->pt[i] = params[i];
+    update_corr(r, sections, count);
+}
+
 static void control(Resona *r, unsigned len)
 {
     resona_shm_t *m = r->shm;
-    uint32_t seq = __atomic_load_n(&m->param_seq, __ATOMIC_ACQUIRE);
-    if (seq != r->last_seq || r->first) {
-        r->last_seq = seq;
-        for (int i = 0; i < P_COUNT; i++) {
-            float v = m->params[i];
-            if (isfinite(v)) r->pt[i] = v;
-        }
-        update_corr(r);
-    }
+    read_controls(r);
     float c = r->c_param * (float)len / CTRL_BLOCK;
     for (int i = 0; i < P_COUNT; i++) {
         float d = r->pt[i] - r->ps[i];
