@@ -20,8 +20,9 @@ Flickable {
         width: root.width - 80; height: 84
         Column {
             anchors.verticalCenter: parent.verticalCenter
-            Label { text: root.title; role: "displayS"; emphasized: true; font.variableAxes: { "wdth": 118 } }
-            Label { text: root.subtitle; role: "bodyL"; color: Theme.inkVariant; visible: text !== "" }
+            width: Math.max(0, parent.width - right.width - 24)
+            Label { width: parent.width; elide: Text.ElideRight; text: root.title; role: "displayS"; emphasized: true; font.variableAxes: { "wdth": 118 } }
+            Label { width: parent.width; elide: Text.ElideRight; text: root.subtitle; role: "bodyL"; color: Theme.inkVariant; visible: text !== "" }
         }
         Row { id: right; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 12 }
     }

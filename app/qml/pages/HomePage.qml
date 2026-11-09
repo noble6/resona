@@ -16,11 +16,12 @@ Page {
     headerRight: [
         Rectangle {
             height: 40; radius: 20
-            width: statusRow.implicitWidth + 32
+            width: Math.min(360, Math.max(140, page.width - 560))
             color: Theme.surfaceContainerHigh
             Row {
                 id: statusRow
                 anchors.centerIn: parent
+                width: parent.width - 32
                 spacing: 10
                 Rectangle {
                     width: 10; height: 10; radius: 5
@@ -30,6 +31,7 @@ Page {
                         NumberAnimation { to: 0.35; duration: 700 } NumberAnimation { to: 1; duration: 700 } }
                 }
                 Label { text: audio.status + (audio.running ? "  ·  " + (audio.sampleRate / 1000) + " kHz  ·  " + page.outputDesc : "")
+                        width: parent.width - 20; elide: Text.ElideRight
                         role: "labelL"; color: Theme.inkVariant; anchors.verticalCenter: parent.verticalCenter }
             }
         },
