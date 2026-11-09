@@ -367,6 +367,9 @@ static void update_corr(Resona *r)
     int k = 0;
     for (unsigned i = 0; i < n; i++) {
         resona_corr_t s = m->corr[i];
+        if (!isfinite(s.type) || s.type < CORR_PK || s.type > CORR_RAW || s.type != (int)s.type) continue;
+        if (s.type != CORR_RAW && (!isfinite(s.freq) || s.freq <= 0 ||
+            !isfinite(s.q) || s.q <= 0 || !isfinite(s.gain))) continue;
         bq_c *c = &r->corr_c[k];
         switch ((int)s.type) {
         case CORR_PK: bq_design(c, BQ_PEAK, r->fs, s.freq, s.q, clampf(s.gain, -24, 24)); break;
@@ -380,6 +383,8 @@ static void update_corr(Resona *r)
             c->b0 = s.b0; c->b1 = s.b1; c->b2 = s.b2; c->a1 = s.a1; c->a2 = s.a2; break;
         default: continue;
         }
+        if (!isfinite(c->b0) || !isfinite(c->b1) || !isfinite(c->b2) ||
+            !isfinite(c->a1) || !isfinite(c->a2)) continue;
         k++;
     }
     if (k != r->corr_n) memset(r->corr_s, 0, sizeof r->corr_s);

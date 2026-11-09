@@ -291,7 +291,7 @@ int main(int argc, char **argv)
 
         /* 11. Correction EQ: designed PK, raw DDC biquad, unstable raw rejected */
         neutral(); M->params[P_CORR_ON] = 1; M->params[P_CORR_PREAMP] = -3;
-        M->corr_count = 3;
+        M->corr_count = 7;
         M->corr[0] = (resona_corr_t){CORR_PK, 2000, 6, 2, 0, 0, 0, 0, 0, 0};
         { /* raw: same filter designed in double here, at 500 Hz +4 dB */
             double A = pow(10, 4 / 40.0), w = 2 * M_PI * 500 / fs, al = sin(w) / 2.0, a0 = 1 + al / A;
@@ -299,6 +299,10 @@ int main(int argc, char **argv)
                                          (float)((1 - al * A) / a0), (float)(-2 * cos(w) / a0), (float)((1 - al / A) / a0), 0};
         }
         M->corr[2] = (resona_corr_t){CORR_RAW, 0, 0, 0, 1, 0, 0, -2.5f, 1.8f, 0};
+        M->corr[3] = (resona_corr_t){CORR_PK, NAN, 6, 1, 0, 0, 0, 0, 0, 0};
+        M->corr[4] = (resona_corr_t){CORR_PK, 1000, 6, INFINITY, 0, 0, 0, 0, 0, 0};
+        M->corr[5] = (resona_corr_t){CORR_PK, 1000, NAN, 1, 0, 0, 0, 0, 0, 0};
+        M->corr[6] = (resona_corr_t){NAN, 1000, 6, 1, 0, 0, 0, 0, 0, 0};
         M->param_seq++;
         I = mk(D2, fs, n);
         for (unsigned i = 0; i < n; i++) I.il[i] = I.ir[i] = 0.05f * (sinf(2 * M_PI * 2000 * i / fs) + sinf(2 * M_PI * 500 * i / fs));
