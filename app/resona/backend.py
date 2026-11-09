@@ -749,10 +749,10 @@ class Backend(QObject):
         if not isinstance(data, dict) or "params" not in data:
             raise ValueError("not a Resona preset")
         data = validation.snapshot(data)
-        self._restore(data)
         if data.get("correction"):
             self._set_correction(data["correction"])
-        else:
+        self._restore(data)
+        if not data.get("correction"):
             self.clearCorrection()
         self.toast.emit(f"Loaded “{name}”")
 
