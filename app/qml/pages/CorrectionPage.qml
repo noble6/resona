@@ -121,7 +121,7 @@ Page {
                             Label { text: page.ir.name ? page.ir.name + " · " + page.ir.channels + " ch · " + page.ir.seconds + " s · " + (page.ir.rate / 1000) + " kHz"
                                                       : "ViPER/JamesDSP IRS, room impulses, HRIRs or any WAV"
                                     role: "body"; color: Theme.inkVariant; width: parent.width; elide: Text.ElideRight } }
-                        M3Switch { visible: !!page.ir.name; checked: !!page.ir.on; onToggled: (v) => audio.setIrOn(v) }
+                        M3Switch { Accessible.name: "Convolver"; visible: !!page.ir.name; checked: !!page.ir.on; onToggled: (v) => audio.setIrOn(v) }
                     }
                     Item {
                         visible: !!page.ir.name
@@ -132,6 +132,7 @@ Page {
                                 Label { text: "Wet / dry"; role: "labelL"; color: Theme.inkVariant }
                                 Label { anchors.right: parent.right; text: Math.round((page.ir.mix || 0) * 100) + "%"; role: "labelL"; emphasized: true } }
                             WavySlider { width: parent.width; value: page.ir.mix || 0; enabled: !!page.ir.on
+                                Accessible.name: "Convolver mix"
                                          onMoved: (v) => audio.setIrMix(v) }
                         }
                     }

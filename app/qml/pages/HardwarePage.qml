@@ -42,7 +42,7 @@ Page {
                     Label { width: parent.width; wrapMode: Text.WordWrap; role: "body"; color: Theme.inkVariant
                             text: audio.hiRes ? "PipeWire follows each song's native rate (44.1, 96, 192 kHz) with no resampling to 48 kHz."
                                               : "Off: every stream is resampled to " + page.fmtRate(+(audio.clock.rate || 48000)) + ". Turn on to play files at their native rate." } }
-                M3Switch { checked: audio.hiRes; onToggled: (v) => audio.setHiRes(v) }
+                M3Switch { Accessible.name: "Hi-Res mode"; checked: audio.hiRes; onToggled: (v) => audio.setHiRes(v) }
             }
             Flow {
                 Layout.fillWidth: true; spacing: 8
@@ -69,7 +69,7 @@ Page {
                     Label { text: "Studio-grade resampler"; role: "titleM"; emphasized: true }
                     Label { text: "Highest-quality sample-rate conversion for every app (applies after an audio restart)"
                             role: "body"; color: Theme.inkVariant } }
-                M3Switch { checked: audio.hqResampler; onToggled: (v) => audio.setHqResampler(v) }
+                M3Switch { Accessible.name: "High-quality resampler"; checked: audio.hqResampler; onToggled: (v) => audio.setHqResampler(v) }
                 Btn { text: "Restart audio"; icon: "reset"; variant: "tonal"; onClicked: audio.restartAudio() }
             }
         }

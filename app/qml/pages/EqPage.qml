@@ -10,7 +10,7 @@ Page {
         Row {
             spacing: 12
             Label { text: "EQ"; role: "titleM"; anchors.verticalCenter: parent.verticalCenter }
-            M3Switch { checked: !!audio.params.eq_on; onToggled: (v) => audio.setParam("eq_on", v ? 1 : 0)
+            M3Switch { Accessible.name: "Equalizer"; checked: !!audio.params.eq_on; onToggled: (v) => audio.setParam("eq_on", v ? 1 : 0)
                        anchors.verticalCenter: parent.verticalCenter }
         },
         Btn { text: "Reset"; icon: "reset"; variant: "outlined"; onClicked: audio.resetEq() }

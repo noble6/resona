@@ -41,6 +41,7 @@ Card {
                         Layout.fillWidth: true; elide: Text.ElideRight }
             }
             M3Switch {
+                Accessible.name: root.title
                 visible: root.toggleKey !== ""
                 checked: root.on
                 onToggled: (v) => audio.setParam(root.toggleKey, v ? 1 : 0)

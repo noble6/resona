@@ -23,7 +23,7 @@ Page {
                     Label { text: "Output device"; role: "titleL"; emphasized: true }
                     Label { text: "Where Resona sends processed sound"; role: "body"; color: Theme.inkVariant } }
                 Label { text: "Follow system output"; role: "labelL"; color: Theme.inkVariant }
-                M3Switch { checked: audio.follow; onToggled: (v) => audio.setFollow(v) }
+                M3Switch { Accessible.name: "Follow system output"; checked: audio.follow; onToggled: (v) => audio.setFollow(v) }
             }
             Repeater {
                 model: audio.sinks
@@ -94,7 +94,7 @@ Page {
                         Icon { name: "tune"; size: 22; color: Theme.primary }
                         Label { text: pr.modelData; role: "bodyL"; Layout.fillWidth: true; leftPadding: 8 }
                         Btn { text: "Export"; variant: "text"; size: 32; onClicked: { exportDlg.preset = pr.modelData; exportDlg.open() } }
-                        Btn { icon: "delete"; variant: "text"; size: 32; onClicked: audio.deletePreset(pr.modelData) }
+                        Btn { Accessible.name: "Delete preset " + pr.modelData; icon: "delete"; variant: "text"; size: 32; onClicked: audio.deletePreset(pr.modelData) }
                     }
                 }
             }
@@ -115,14 +115,14 @@ Page {
                     Label { text: "Route every app through Resona"; role: "titleM"; emphasized: true }
                     Label { text: "Catches games that open your speakers directly (FMOD/Wwise titles like War Thunder), so effects and volume keys apply"
                             role: "body"; color: Theme.inkVariant; width: parent.width; wrapMode: Text.WordWrap } }
-                M3Switch { checked: audio.captureAll; onToggled: (v) => audio.setCaptureAll(v) }
+                M3Switch { Accessible.name: "Capture apps that bypass Resona"; checked: audio.captureAll; onToggled: (v) => audio.setCaptureAll(v) }
             }
             RowLayout {
                 Layout.fillWidth: true
                 Column { Layout.fillWidth: true
                     Label { text: "Remember sound per device"; role: "titleM"; emphasized: true }
                     Label { text: "Headphones, speakers, HDMI and Bluetooth each keep their own profile and EQ"; role: "body"; color: Theme.inkVariant } }
-                M3Switch { checked: audio.perDevice; onToggled: (v) => audio.setPerDevice(v) }
+                M3Switch { Accessible.name: "Remember sound per device"; checked: audio.perDevice; onToggled: (v) => audio.setPerDevice(v) }
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -130,7 +130,7 @@ Page {
                     Label { text: "Automatic profile per app"; role: "titleM"; emphasized: true }
                     Label { text: audio.autoApp ? "Active now for " + audio.autoApp : "Movie for mpv & VLC, Music for Spotify, Gaming for Steam, Voice for Discord…"
                             role: "body"; color: Theme.inkVariant } }
-                M3Switch { checked: audio.appAuto; onToggled: (v) => audio.setAppAuto(v) }
+                M3Switch { Accessible.name: "Automatic app profiles"; checked: audio.appAuto; onToggled: (v) => audio.setAppAuto(v) }
             }
             Label { visible: audio.apps.length > 0; text: "Playing now"; role: "labelL"; color: Theme.inkVariant; topPadding: 4 }
             Repeater {
@@ -162,7 +162,7 @@ Page {
                     Label { text: "Color"; role: "titleL"; emphasized: true }
                     Label { text: "The whole interface re-tones from one seed"; role: "body"; color: Theme.inkVariant } }
                 Label { text: "Dark"; role: "labelL"; color: Theme.inkVariant }
-                M3Switch { checked: audio.dark; onToggled: (v) => audio.setDark(v) }
+                M3Switch { Accessible.name: "Dark theme"; checked: audio.dark; onToggled: (v) => audio.setDark(v) }
             }
             Row {
                 spacing: 14
@@ -274,7 +274,7 @@ Page {
                 Item { Layout.fillWidth: true }
                 Label { text: "Install by itself"; role: "labelL"; color: Theme.inkVariant
                         opacity: updCard.u.freq === "manual" ? 0.4 : 1 }
-                M3Switch { checked: updCard.u.auto; enabled: updCard.u.freq !== "manual" && updCard.u.kind === "user"
+                M3Switch { Accessible.name: "Install updates automatically"; checked: updCard.u.auto; enabled: updCard.u.freq !== "manual" && updCard.u.kind === "user"
                            opacity: enabled ? 1 : 0.4; onToggled: (v) => audio.setUpdateAuto(v) }
             }
         }
@@ -291,7 +291,7 @@ Page {
                 Column { Layout.fillWidth: true
                     Label { text: "Start with my session"; role: "titleM"; emphasized: true }
                     Label { text: "Launch quietly to the tray at login"; role: "body"; color: Theme.inkVariant } }
-                M3Switch { checked: audio.autostart; onToggled: (v) => audio.setAutostart(v) }
+                M3Switch { Accessible.name: "Start Resona at login"; checked: audio.autostart; onToggled: (v) => audio.setAutostart(v) }
             }
         }
         Card {
