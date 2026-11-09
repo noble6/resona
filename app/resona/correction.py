@@ -15,6 +15,7 @@ import numpy as np
 AUTOEQ_RAW = "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results"
 CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "resona"
 UA = {"User-Agent": "Resona-sound-engine"}
+MAX_IR_BYTES = 64 * 1024 * 1024
 
 
 # ---------------------------------------------------------------- AutoEq
@@ -158,16 +159,25 @@ def safe_preamp(filters: list[dict], fs: float = 48000.0) -> float:
 # ---------------------------------------------------------------- impulse responses
 def read_ir(path: str) -> dict:
     """Inspect a WAV/IRS impulse response: channels, rate, length and a safe gain."""
-    data = Path(path).read_bytes()
+    with Path(path).open("rb") as stream:
+        data = stream.read(MAX_IR_BYTES + 1)
+    if len(data) > MAX_IR_BYTES:
+        raise ValueError("impulse response exceeds 64 MiB")
     if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
         raise ValueError("not a RIFF/WAVE file")
     pos, fmt, raw = 12, None, None
     while pos + 8 <= len(data):
         cid, size = data[pos:pos + 4], struct.unpack_from("<I", data, pos + 4)[0]
+        if pos + 8 + size > len(data):
+            raise ValueError("truncated WAV chunk")
         body = data[pos + 8:pos + 8 + size]
         if cid == b"fmt ":
+            if len(body) < 16:
+                raise ValueError("truncated WAV format")
             tag, ch, rate, _, _, bits = struct.unpack_from("<HHIIHH", body)
-            if tag == 0xFFFE and len(body) >= 26:
+            if tag == 0xFFFE:
+                if len(body) < 40:
+                    raise ValueError("truncated extensible WAV format")
                 tag = struct.unpack_from("<H", body, 24)[0]
             fmt = (tag, ch, rate, bits)
         elif cid == b"data":
@@ -176,6 +186,12 @@ def read_ir(path: str) -> dict:
     if not fmt or raw is None:
         raise ValueError("missing fmt/data chunk")
     tag, ch, rate, bits = fmt
+    if rate <= 0:
+        raise ValueError("invalid WAV sample rate")
+    if ch not in (1, 2, 4):
+        raise ValueError(f"{ch}-channel IR: need mono, stereo or true-stereo (4 ch)")
+    if bits <= 0 or bits % 8 or len(raw) % (ch * (bits // 8)):
+        raise ValueError("incomplete WAV sample frame")
     if tag == 3 and bits == 32:
         x = np.frombuffer(raw[: len(raw) // 4 * 4], "<f4")
     elif tag == 3 and bits == 64:
@@ -189,11 +205,11 @@ def read_ir(path: str) -> dict:
         x = np.frombuffer(raw[: len(raw) // 4 * 4], "<i4") / 2147483648.0
     else:
         raise ValueError(f"unsupported WAV format (tag {tag}, {bits} bit)")
-    if ch not in (1, 2, 4):
-        raise ValueError(f"{ch}-channel IR: need mono, stereo or true-stereo (4 ch)")
     x = np.asarray(x, dtype=np.float64)[: len(x) // ch * ch].reshape(-1, ch)
     if len(x) < 2:
         raise ValueError("empty impulse response")
+    if not np.isfinite(x).all():
+        raise ValueError("non-finite impulse response samples")
     # gain so the loudest frequency of the (summed) response sits at 0 dB
     n = 1 << int(np.ceil(np.log2(len(x) * 2)))
     if ch == 4:
