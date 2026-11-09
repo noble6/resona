@@ -9,11 +9,15 @@ fi
 runtime=$(mktemp -d "${TMPDIR:-/tmp}/resona-tests.XXXXXX")
 export XDG_RUNTIME_DIR="$runtime"
 export XDG_CONFIG_HOME="$runtime/config"
+export XDG_STATE_HOME="$runtime/state"
+export XDG_CACHE_HOME="$runtime/cache"
+export XDG_DATA_HOME="$runtime/data"
 export PIPEWIRE_RUNTIME_DIR="$runtime"
 export PIPEWIRE_REMOTE=pipewire-0
 export PULSE_SERVER="unix:$runtime/pulse/native"
 export QT_QPA_PLATFORM=offscreen
 unset PIPEWIRE_CONFIG_DIR PIPEWIRE_CONFIG_NAME PULSE_CLIENTCONFIG
+mkdir -p "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME"
 pids=()
 cleanup() {
     rc=$?

@@ -52,4 +52,4 @@ jobs:
       - run: pip install numpy PySide6
       - run: make -C engine
       - name: Live tests on isolated PipeWire server
-        run: bash tests/run_pipewire.sh
+        run: python tests/test_pipewire_environment.py
