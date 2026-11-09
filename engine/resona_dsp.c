@@ -543,6 +543,9 @@ static void reset_state(Resona *r)
 {
     memset(r->eq_s, 0, sizeof r->eq_s);
     memset(r->ieq_s, 0, sizeof r->ieq_s); memset(r->ieq_bp_s, 0, sizeof r->ieq_bp_s);
+    memset(r->ieq_acc, 0, sizeof r->ieq_acc); memset(r->ieq_ms, 0, sizeof r->ieq_ms);
+    r->lev_acc = r->lev_ms = r->lev_gain_db = 0;
+    r->lev_cnt = 0; r->lev_gain_lin = 1;
     memset(r->ld_lo_s, 0, sizeof r->ld_lo_s); memset(r->ld_hi_s, 0, sizeof r->ld_hi_s);
     memset(&r->vo_s, 0, sizeof r->vo_s);
     memset(r->tube_dc_x, 0, sizeof r->tube_dc_x); memset(r->tube_dc_y, 0, sizeof r->tube_dc_y);
@@ -726,6 +729,9 @@ static void run(LADSPA_Handle h, unsigned long n)
             float xl = r->in[0][off + i], xr = r->in[1][off + i];
             if (!isfinite(xl)) xl = 0;
             if (!isfinite(xr)) xr = 0;
+            /* Discard corrupt finite samples before squaring detector inputs. */
+            if (fabsf(xl) > 1e6f) xl = 0;
+            if (fabsf(xr) > 1e6f) xr = 0;
             float al = fabsf(xl), ar = fabsf(xr);
             if (al > pk_in[0]) pk_in[0] = al;
             if (ar > pk_in[1]) pk_in[1] = ar;

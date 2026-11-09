@@ -2,6 +2,7 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <float.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -159,9 +160,12 @@ int main(int argc, char **argv)
         I = mk(D2, fs, n);
         for (unsigned i = 0; i < n; i++) I.il[i] = I.ir[i] = 0.1f * sinf(2 * M_PI * 300 * i / fs);
         I.il[1000] = NAN; I.ir[2000] = INFINITY;
+        I.il[3000] = FLT_MAX; I.ir[4000] = -FLT_MAX;
         process(&I, n, 128);
         int fin = 1; for (unsigned i = 0; i < n; i++) if (!isfinite(I.o[0][i]) || !isfinite(I.o[1][i])) fin = 0;
         CHECK(fin, "NaN/Inf input is sanitized");
+        CHECK(isfinite(M->content_db) && M->content_db > -60 && M->content_db < 0,
+              "detectors recover after extreme finite input (content %.1f dB)", M->content_db);
         rm(&I);
 
         /* 5. DeepBass harmonics */
