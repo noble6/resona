@@ -12,7 +12,27 @@ Rectangle {
     signal clicked()
     signal pressedChanged2(bool down)
 
-    readonly property bool down: ma.pressed
+    property bool keyDown: false
+    readonly property bool down: ma.pressed || keyDown
+    activeFocusOnTab: true
+    Accessible.role: Accessible.Button
+    Accessible.name: text || icon
+    Accessible.checkable: toggle
+    Accessible.checked: selected
+    Accessible.pressed: down
+    Accessible.onPressAction: clicked()
+    Keys.onPressed: (event) => {
+        if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) < 0) return
+        event.accepted = true
+        if (!event.isAutoRepeat) { keyDown = true; pressedChanged2(true) }
+    }
+    Keys.onReleased: (event) => {
+        if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) < 0) return
+        event.accepted = true
+        if (!event.isAutoRepeat && keyDown) { keyDown = false; pressedChanged2(false); clicked() }
+    }
+    onActiveFocusChanged: if (!activeFocus && keyDown) { keyDown = false; pressedChanged2(false) }
+    FocusRing { radius: root.radius + 3 }
     readonly property color fg: variant === "filled" ? Theme.inkPrimary
                               : variant === "tonal" ? Theme.inkSecondaryContainer
                               : Theme.primary
