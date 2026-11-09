@@ -26,17 +26,35 @@ Item {
     readonly property real zeroFrac: bipolar ? Math.max(0, Math.min(1, (0 - from) / (to - from))) : 0
     readonly property real handleX: frac * (width - 4) + 2
     readonly property real gap: 6
-    property real amp: (wavy && enabled && Math.abs(frac - zeroFrac) > 0.02) ? (mouse.pressed ? 2 : 3.2) : 0
+    // a short active span stays flat: a partial ripple next to the handle reads as a glitch
+    readonly property real span: Math.abs(frac - zeroFrac) * (width - 4) - gap - 6
+    property real amp: (wavy && enabled) ? (mouse.pressed ? 2 : 3.2) * Math.max(0, Math.min(1, (span - wavelength) / wavelength)) : 0
     Behavior on amp { NumberAnimation { duration: 320; easing.type: Easing.OutBack } }
     readonly property real wavelength: 26
 
-    // inactive track
+    // inactive track, split around the handle
     Rectangle {
-        readonly property real x0: root.bipolar ? 0 : root.handleX + root.gap
+        visible: root.bipolar && width > 0
+        x: 0; width: Math.max(0, root.handleX - root.gap)
+        anchors.verticalCenter: parent.verticalCenter
+        height: 6; radius: 3
+        color: root.trackColor
+    }
+    Rectangle {
+        readonly property real x0: root.handleX + root.gap
         x: x0; width: Math.max(0, root.width - x0)
         anchors.verticalCenter: parent.verticalCenter
         height: 6; radius: 3
         color: root.trackColor
+    }
+    // zero mark on bipolar sliders
+    Rectangle {
+        visible: root.bipolar && Math.abs(root.frac - root.zeroFrac) * (root.width - 4) > root.gap + 12
+        width: 2; height: 14; radius: 1
+        x: root.zeroFrac * (root.width - 4) + 1
+        anchors.verticalCenter: parent.verticalCenter
+        color: root.activeColor
+        opacity: 0.6
     }
     // stop indicator
     Rectangle {

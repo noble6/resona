@@ -4,7 +4,25 @@ import QtQuick
 Item {
     id: root
     readonly property var freqs: audio.eqFreqs
-    readonly property real range: 15
+    // The curve is the true summed response: boosted neighbours add up past any single band,
+    // so the scale grows to fit it (frozen while dragging so the handle tracks the pointer)
+    property int dragging: 0
+    readonly property real fitRange: {
+        let m = 0
+        for (const v of audio.eqCurve) m = Math.max(m, Math.abs(v))
+        return Math.max(15, Math.ceil((m + 2) / 6) * 6)
+    }
+    property real range: 15
+    Binding on range { value: root.fitRange; when: root.dragging === 0; restoreMode: Binding.RestoreNone }
+    Behavior on range { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
+    onRangeChanged: { grid.requestPaint(); curve.requestPaint() }
+    function curveAt(f) {
+        const pts = audio.eqCurve, n = pts.length
+        if (!n) return 0
+        const t = Math.max(0, Math.min(n - 1, Math.log(f / 20) / Math.log(1000) * (n - 1)))
+        const i = Math.floor(t), fr = t - i
+        return i + 1 < n ? pts[i] * (1 - fr) + pts[i + 1] * fr : pts[i]
+    }
     readonly property real padY: 22
     function fx(f) { return Math.log(f / 20) / Math.log(1000) * width }
     function gy(db) { return height / 2 - db / range * (height / 2 - padY) }
@@ -19,7 +37,8 @@ Item {
         onPaint: {
             const ctx = getContext("2d"); ctx.reset()
             ctx.lineWidth = 1
-            for (const db of [-12, -6, 0, 6, 12]) {
+            const stepDb = root.range > 21 ? 12 : 6
+            for (let db = -Math.floor((root.range - 1) / stepDb) * stepDb; db < root.range - 1; db += stepDb) {
                 const y = Math.round(root.gy(db)) + 0.5
                 ctx.strokeStyle = root.rgba(Theme.outlineVariant, db === 0 ? 1 : 0.55)
                 ctx.setLineDash(db === 0 ? [] : [2, 6])
@@ -80,11 +99,23 @@ Item {
             readonly property string key: "eq" + index
             readonly property real gain: audio.params[key] || 0
             readonly property bool active: ma.pressed || ma.containsMouse
+            readonly property real curveDb: root.curveAt(root.freqs[index])
             width: 44; height: 44
             x: root.fx(root.freqs[index]) - width / 2
             y: root.gy(gain) - height / 2
             Behavior on y { enabled: !ma.pressed; NumberAnimation { duration: Theme.medium; easing.type: Easing.OutBack } }
 
+            // stem to the summed curve: how much the neighbouring bands add on top of this one
+            Rectangle {
+                readonly property real dy: root.gy(h.curveDb) - root.gy(h.gain)
+                visible: Math.abs(h.curveDb - h.gain) > 1.5
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 2; radius: 1
+                y: parent.height / 2 + Math.min(0, dy)
+                height: Math.abs(dy)
+                color: Theme.primary
+                opacity: 0.35
+            }
             MorphShape {
                 anchors.centerIn: parent
                 width: ma.pressed ? 40 : 26; height: width
@@ -115,12 +146,14 @@ Item {
                 cursorShape: Qt.SizeVerCursor
                 preventStealing: true
                 property real y0; property real g0
-                onPressed: (e) => { y0 = mapToItem(root, e.x, e.y).y; g0 = h.gain }
+                onPressed: (e) => { y0 = mapToItem(root, e.x, e.y).y; g0 = h.gain; root.dragging++ }
+                onReleased: root.dragging = Math.max(0, root.dragging - 1)
+                onCanceled: root.dragging = Math.max(0, root.dragging - 1)
                 onPositionChanged: (e) => {
                     if (!pressed) return
                     const dy = mapToItem(root, e.x, e.y).y - y0
                     let g = g0 - dy / (root.height / 2 - root.padY) * root.range
-                    g = Math.max(-root.range, Math.min(root.range, Math.round(g * 10) / 10))
+                    g = Math.max(-15, Math.min(15, Math.round(g * 10) / 10))
                     audio.setParam(h.key, g)
                 }
                 onDoubleClicked: audio.setParam(h.key, 0)
