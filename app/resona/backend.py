@@ -279,6 +279,10 @@ class Backend(QObject):
                 self.stateChanged.emit()
 
     def shutdown(self):
+        # stop every timer first: a late animation tick would read the shm after it is unmapped
+        for t in (self._anim, self._watchdog, self._upd_timer, self._restart_timer, self._app_timer,
+                  self._hw_timer, self._evt_timer, self._vol_timer, self._ir_timer):
+            t.stop()
         if self._auto_base:
             self._restore(self._auto_base)
             self._auto_base = None

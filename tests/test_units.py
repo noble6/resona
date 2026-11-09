@@ -89,6 +89,16 @@ check(src.count("BASS_BALANCED, BASS_SUB, BASS_PUNCHY, BASS_WARM") == 1 and len(
       "bass types mirror the engine voicings")
 check(all(0 <= p[2].get("bass_type", 0) < 4 for p in presets.PROFILES.values()), "profiles use valid bass types")
 
+# shared memory is safe to touch after close (late UI writes during shutdown used to segfault)
+with tempfile.TemporaryDirectory() as d:
+    st = shm.SharedState(str(Path(d) / "shm"))
+    st.write({"bass_type": 2})
+    st.close()
+    st.write({"bass_amt": 1}); st.write_corr([{"type": "PK", "freq": 100, "gain": 3, "q": 1}])
+    a_, b_ = st.latest(256)
+    check(st.heartbeat == 0 and st.meters()["out_l"] == 0 and len(a_) == 256 and len(st.ieq_gains()) == 10,
+          "shared memory access after close is a safe no-op")
+
 # updater
 check(updater.version_tuple("v2.10.0") > updater.version_tuple("2.9.9") > updater.version_tuple("2.9"),
       "release versions compare numerically")
