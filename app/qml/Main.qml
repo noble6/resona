@@ -79,10 +79,11 @@ Window {
         y: shown ? parent.height - height - 32 : parent.height + 20
         property bool shown: false
         Behavior on y { NumberAnimation { duration: Theme.medium; easing.type: Easing.OutBack } }
-        height: 52; radius: 16
-        width: snackText.implicitWidth + 48
+        height: Math.max(52, snackText.implicitHeight + 28); radius: 16
+        width: Math.min(stage.width - 32, snackText.implicitWidth + 48)
         color: Theme.inverseSurface
-        Label { id: snackText; anchors.centerIn: parent; text: snack.text; role: "bodyL"; color: Theme.inverseOnSurface }
+        Label { id: snackText; anchors.centerIn: parent; width: parent.width - 48; wrapMode: Text.Wrap
+                text: snack.text; role: "bodyL"; color: Theme.inverseOnSurface }
         Timer { id: snackTimer; interval: 3500; onTriggered: snack.shown = false }
         Connections { target: audio; function onToast(msg) { snack.text = msg; snack.shown = true; snackTimer.restart() } }
     }

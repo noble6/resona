@@ -61,3 +61,9 @@ pactl set-default-sink ci_hardware
 python3 tests/test_pipewire.py
 python3 tests/test_capture_live.py
 python3 tests/test_routing_live.py
+
+RESONA_SCREENSHOT="$runtime/screenshots" RESONA_SHM="$runtime/ui-shm" \
+    RESONA_TEST_TARGET=ci_hardware python3 app/main.py > "$runtime/ui.log" 2>&1
+if grep -E 'qml:|Error:' "$runtime/ui.log"; then
+    exit 1
+fi
