@@ -4,14 +4,15 @@ import unittest
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PySide6.QtCore import QCoreApplication, Qt
+from PySide6.QtCore import QCoreApplication, QPointF, Qt
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtQml import QQmlApplicationEngine, QQmlPropertyMap
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 COMPONENTS = (Path(__file__).resolve().parents[1] / "app/qml/components").as_uri()
+PAGES = (Path(__file__).resolve().parents[1] / "app/qml/pages").as_uri()
 
 
 class KeyboardTests(unittest.TestCase):
@@ -22,15 +23,17 @@ class KeyboardTests(unittest.TestCase):
             raise RuntimeError("QML tests need a GUI application; run them in a separate process")
         cls.app = app or QApplication([])
 
-    def load(self, control):
+    def load(self, control, audio=None, width=400, height=200):
         self.engine = QQmlApplicationEngine()
-        self.engine.rootContext().setContextProperty("audio", None)
+        self.audio = audio
+        self.engine.rootContext().setContextProperty("audio", audio)
         self.engine.rootContext().setContextProperty("fontFamily", "sans-serif")
         self.engine.loadData(f'''
             import QtQuick
             import "{COMPONENTS}"
+            import "{PAGES}" as Pages
             Window {{
-                id: win; width: 400; height: 200; visible: true
+                id: win; width: {width}; height: {height}; visible: true
                 property int activations: 0
                 property int shortcutActivations: 0
                 Shortcut {{ sequence: "Space"; onActivated: win.shortcutActivations++ }}
@@ -91,6 +94,42 @@ class KeyboardTests(unittest.TestCase):
         self.assertEqual(item.property("value"), 0)
         QTest.keyClick(self.window, Qt.Key.Key_End)
         self.assertEqual(item.property("value"), 1)
+
+    def test_settings_page_reveals_tab_focus_in_both_directions(self):
+        audio = QQmlPropertyMap()
+        values = dict(
+            follow=True, sinks=[], output="", userPresets=[], captureAll=True,
+            perDevice=True, appAuto=True, autoApp="", apps=[], profiles=[],
+            dark=True, reducedMotion=True, accents=["#8B5CF6"], accent="#8B5CF6",
+            updateInfo=dict(state="idle", freq="weekly", kind="user", auto=False,
+                            notes="", message="", last=0),
+            autostart=False, version="test", sampleRate=48000, outputLayout={"name": "Stereo"},
+        )
+        for key, value in values.items():
+            audio.insert(key, value)
+        page = self.load('Pages.SettingsPage { objectName: "control"; anchors.fill: parent }',
+                         audio=audio, width=1040, height=760)
+        self.assertGreater(page.property("contentHeight"), page.height())
+        for modifiers in (Qt.KeyboardModifier.NoModifier, Qt.KeyboardModifier.ShiftModifier):
+            scrolled = False
+            visited = 0
+            for _ in range(30):
+                QTest.keyClick(self.window, Qt.Key.Key_Tab, modifiers)
+                QTest.qWait(10)
+                focus = self.window.activeFocusItem()
+                ancestor = focus
+                while ancestor is not None and ancestor != page:
+                    ancestor = ancestor.parentItem()
+                if focus is None or focus == page or ancestor is None:
+                    continue
+                visited += 1
+                top = focus.mapToItem(page, QPointF(0, 0)).y()
+                bottom = focus.mapToItem(page, QPointF(0, focus.height())).y()
+                self.assertGreaterEqual(top, -1, f"focused control hidden above page: {top}")
+                self.assertLessEqual(bottom, page.height() + 1, f"focused control hidden below page: {bottom}")
+                scrolled |= page.property("contentY") > 0
+            self.assertGreater(visited, 10)
+            self.assertTrue(scrolled, "test must reach controls below the initial viewport")
 
 
 if __name__ == "__main__":
