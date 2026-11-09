@@ -14,7 +14,7 @@ with a Material 3 Expressive interface.
 ![License](https://img.shields.io/badge/license-GPL--3.0-8B5CF6)
 ![PipeWire](https://img.shields.io/badge/PipeWire-native-22D3B6)
 ![DSP](https://img.shields.io/badge/DSP-C%20%C2%B7%20lock--free-FF5E7E)
-![Latency](https://img.shields.io/badge/latency-1.5%20ms-FFB224)
+![DSP lookahead](https://img.shields.io/badge/DSP%20lookahead-1.5%20ms-FFB224)
 
 <img src="docs/demo.gif" width="860" alt="Resona demo: a morphing power button and a live before/after spectrum">
 
@@ -90,7 +90,7 @@ The interface is Material 3 Expressive, hand-built in QML: shape-morphing contro
 | ViPER DDC + IRS convolver | Yes | IR only | Yes |
 | Hardware / codec / HDMI ELD inspector, Hi-Res toggle | Yes | No | No |
 | Per-device memory + per-app profiles | Yes | Yes (device) | Partial |
-| Engine CPU (everything on, 48 kHz) | **~1 % of one core** | depends on chain | low |
+| Engine CPU | Reported by the offline DSP benchmark; depends on hardware and sample rate | depends on chain | low |
 
 EasyEffects is still the right tool if you want an arbitrary plugin rack. Resona is for everyone who just wants their audio to sound great.
 
@@ -112,7 +112,7 @@ sudo apt install python3-pyside6.qtquick python3-pyside6.qtwidgets python3-numpy
 
 Arch users can also build `packaging/aur/PKGBUILD`.
 
-Closing the window keeps Resona running in the tray. *Quit* from the tray restores your original output. `./uninstall.sh` removes everything.
+Closing the window keeps Resona running when a system tray is available. Without a tray, closing exits. *Quit* from the tray restores your original output. `./uninstall.sh` removes the app and autostart entry, but keeps presets, settings, caches, and PipeWire configuration.
 
 ## How it works
 
@@ -138,11 +138,18 @@ See **[docs/DSP.md](docs/DSP.md)** for a walk through every block, with the math
 
 ```sh
 make -C engine test                  # 60+ offline DSP checks at 44.1 / 48 / 96 / 192 kHz
+                                    # plus HRTF reference and concurrent control-publication checks
 python3 tests/test_units.py --net    # parsers, presets ↔ engine contract, live AutoEq + real JamesDSP DDC
 python3 tests/test_pipewire.py       # live PipeWire: passthrough, live EQ, AutoEq, 5.1 upmix, convolver
 python3 tests/test_routing_live.py   # default-sink takeover, device following, volume sync, restore
 python3 tests/test_capture_live.py   # games that bypass the default device get routed back through Resona
+bash tests/run_pipewire.sh          # all live suites and UI smoke test on a private audio server
 ```
+
+The 1.5 ms figure is DSP lookahead, not end-to-end playback latency. PipeWire
+buffers, convolution, resampling, and the output device add their own delay.
+DSP benchmark output reports percent of one CPU core at each tested sample rate;
+sanitizer builds are for correctness checks, not performance measurements.
 
 Some of what these suites verify: bit-transparent output with effects neutral; EQ within 0.01 dB; a limiter that never exceeds its ceiling on full-scale noise in 2 or 8 channels; NaN/Inf-safe processing; HRTF tonal balance within ±1.5 dB with a 270 µs interaural delay; Intelligent EQ taming a boomy mix; dialogue steered to the centre speaker while hard-panned instruments stay put.
 
