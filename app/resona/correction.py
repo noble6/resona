@@ -92,7 +92,7 @@ def parse_parametric(text: str) -> tuple[float, list[dict]]:
         f = float(fc.group(1)) * (1000 if fc.group(2) else 1)
         filters.append({"type": ftype, "freq": f, "gain": float(gain.group(1)) if gain else 0.0,
                         "q": float(q.group(1)) if q else 0.7071})
-    return preamp, filters
+    return preamp, filters[:24]
 
 
 # ---------------------------------------------------------------- ViPER DDC
@@ -114,7 +114,7 @@ def parse_vdc(text: str, fs: int) -> list[dict]:
     for i in range(0, len(v) - 4, 5):
         b0, b1, b2, a1, a2 = v[i:i + 5]
         out.append({"type": "RAW", "b0": b0, "b1": b1, "b2": b2, "a1": -a1, "a2": -a2})
-    return out
+    return out[:24]
 
 
 # ---------------------------------------------------------------- response math (matches the engine)

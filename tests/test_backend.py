@@ -1,15 +1,28 @@
 """Offline controller regressions; no audio server or GUI is started."""
 import sys
+import json
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 from resona.backend import Backend
 
 
 class PresetTests(unittest.TestCase):
+    def test_long_legacy_correction_does_not_discard_saved_settings(self):
+        section = {"type": "RAW", "b0": 1, "b1": 0, "b2": 0, "a1": 0, "a2": 0}
+        saved = {"params": {"bass_amt": 0.8}, "correction": {"filters": [section] * 25}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+            path.write_text(json.dumps(saved))
+            with patch("resona.backend.STATE_FILE", path):
+                loaded = Backend._load(None)
+        self.assertEqual(loaded["params"]["bass_amt"], 0.8)
+        self.assertEqual(len(loaded["correction"]["filters"]), 24)
+
     def test_clean_preset_clears_previous_correction(self):
         for correction in (None, {}):
             controller = SimpleNamespace(
