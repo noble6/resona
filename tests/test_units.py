@@ -41,6 +41,17 @@ for dev in presets.DEVICE_MODES:
         assert not (out.get("hrtf_on") and out.get("xfeed_on")), (name, dev)
 check(True, "profile × device overlays are valid and never enable HRTF + crossfeed together")
 
+for dev in presets.DEVICE_MODES:
+    for previous in presets.PROFILES:
+        for name in presets.PROFILES:
+            actual = dict(presets.DEFAULTS)
+            actual.update(presets.profile_params(previous, dev))
+            actual.update(presets.profile_params(name, dev))
+            expected = dict(presets.DEFAULTS)
+            expected.update(presets.profile_params(name, dev))
+            assert actual == expected, (previous, name, dev)
+check(True, "profile transitions do not retain effects from the previous profile")
+
 # EqualizerAPO / AutoEq parsing
 pre, f = correction.parse_parametric("""Preamp: -6.7 dB
 Filter 1: ON LSC Fc 105 Hz Gain 1.9 dB Q 0.70

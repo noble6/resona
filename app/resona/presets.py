@@ -129,7 +129,10 @@ APP_RULES_DEFAULT = {
 
 def profile_params(name: str, device: str) -> dict:
     _, _, p = PROFILES.get(name, PROFILES["Dynamic"])
-    out = {k: v for k, v in p.items() if k != "eq"}
+    # Profiles own effect settings, not routing, gain, or headphone correction.
+    keep = {"enable", "preamp", "output", "sysvol_db", "layout", "corr_on", "corr_preamp"}
+    out = {k: v for k, v in DEFAULTS.items() if k not in keep}
+    out.update({k: v for k, v in p.items() if k != "eq"})
     eq = EQ_PRESETS.get(p.get("eq", "Flat"), EQ_PRESETS["Flat"])
     out.update({f"eq{i}": g for i, g in enumerate(eq)})
     dev = DEVICE_MODES.get(device, {})
