@@ -30,6 +30,8 @@ jobs:
           python tests/test_correction.py
           python tests/test_shm.py
           python tests/test_validation.py
+          python tests/test_desktop.py
+          python tests/test_qml.py
   sanitizers:
     runs-on: ubuntu-latest
     steps:
