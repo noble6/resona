@@ -747,6 +747,8 @@ class Backend(QObject):
         self._restore(data)
         if data.get("correction"):
             self._set_correction(data["correction"])
+        else:
+            self.clearCorrection()
         self.toast.emit(f"Loaded “{name}”")
 
     @Slot(str)
