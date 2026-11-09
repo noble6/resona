@@ -1,5 +1,8 @@
 """Desktop Entry command quoting regressions."""
 import subprocess
+import shutil
+import tempfile
+import time
 import sys
 import unittest
 from pathlib import Path
@@ -14,13 +17,30 @@ class DesktopTests(unittest.TestCase):
                          '"/home/test user/bin/resona" "--hidden"')
 
     def test_exec_metacharacters_round_trip(self):
-        args = ['/home/test $user/"quoted"/back\\slash/`name`/100%/resona', "--hidden"]
+        args = ['/home/test $user/"quoted"/back\\slash/`name`/resona', "100%"]
         encoded = exec_line(args)
         # Undo the Desktop Entry string layer, then the Exec quoting layer.
         decoded = encoded.replace("\\\\", "\\")
         script = 'set -- ' + decoded.replace("%%", "%") + '; printf \'%s\\0\' "$@"'
         result = subprocess.run(["sh", "-c", script], check=True, capture_output=True)
         self.assertEqual(result.stdout.decode().split("\0")[:-1], args)
+
+    @unittest.skipUnless(shutil.which("gio"), "GIO is not installed")
+    def test_gio_launches_percent_in_executable_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / 'space $name "quoted" 100%'
+            marker = Path(directory) / "launched"
+            script.write_text('#!/bin/sh\nprintf launched > "$1"\n')
+            script.chmod(0o755)
+            desktop = Path(directory) / "test.desktop"
+            desktop.write_text("[Desktop Entry]\nType=Application\nName=Test\nExec=" +
+                               exec_line([str(script), str(marker)]) + "\n")
+            subprocess.run(["gio", "launch", str(desktop)], check=True, capture_output=True)
+            for _ in range(30):
+                if marker.exists():
+                    break
+                time.sleep(0.1)
+            self.assertEqual(marker.read_text(), "launched")
 
 
 if __name__ == "__main__":
