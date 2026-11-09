@@ -102,12 +102,12 @@ git clone https://github.com/noble6/resona && cd resona
 resona                # or open "Resona" from your app menu
 ```
 
-Requirements: PipeWire with `pipewire-pulse` and WirePlumber (the default on every modern distro), Python ≥ 3.10, PySide6 (Qt ≥ 6.7), numpy, a C compiler.
+Requirements: PipeWire with `pipewire-pulse` and WirePlumber (the default on every modern distro), Python ≥ 3.10, PySide6 (Qt ≥ 6.7), numpy, libatomic, a C compiler.
 
 ```sh
 sudo pacman -S pyside6 python-numpy gcc make                       # Arch / CachyOS / Manjaro
-sudo dnf install python3-pyside6 python3-numpy gcc make            # Fedora
-sudo apt install python3-pyside6.qtquick python3-pyside6.qtwidgets python3-numpy gcc make # Debian 13 / Ubuntu 24.10+
+sudo dnf install python3-pyside6 python3-numpy libatomic gcc make  # Fedora
+sudo apt install python3-pyside6.qtquick python3-pyside6.qtwidgets python3-numpy libatomic1 gcc make # Debian 13 / Ubuntu 24.10+
 ```
 
 Arch users can also build `packaging/aur/PKGBUILD`.

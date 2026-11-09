@@ -30,7 +30,12 @@ change is click-free. Safety-critical values (limiter ceiling, system volume) sn
 | 15 | **Surround upmix** | 20 ms running L/R power and cross-power give correlation `c` and balance. Centre gain `g = amount · c² · evenness`, so correlated, centred content (dialogue) moves to FC while panned content stays in the fronts (`FL = L − gM`). Surrounds = Side, 120 Hz–7 kHz band-passed, delayed 12 ms (Haas, so the fronts keep localisation), decorrelated with different all-passes and opposite polarity per side. 7.1 rears get a further 20 ms, 5 kHz LP feed. LFE = LR4 120 Hz low-pass of Mid. The layout comes from the target sink's channel map, so 2.1/4.0/5.0/5.1/7.1 all work |
 | 16 | **Limiter** | 1.5 ms lookahead; a monotonic-deque sliding-window minimum of the required gain, linked across all output channels; attack ≈ lookahead/4, 80 ms release, plus a final hard clamp at the ceiling |
 
-## Shared memory (v2)
+## Shared memory (v3)
+
+The UI publishes atomic 32-bit words while `control_seq` is odd, then marks the
+snapshot complete with an even sequence. The engine copies controls once and
+checks that sequence again. If a write overlaps the copy, the engine keeps its
+previous controls; the audio callback never waits or retries.
 
 | offset | field |
 |---|---|
@@ -39,6 +44,7 @@ change is click-free. Safety-critical values (limiter ceiling, system volume) sn
 | 528 | heartbeat, ring_pos, in/out peaks, leveler/limiter/loudness/content dB |
 | 568 | `float ieq_db[10]`: live Intelligent EQ gains |
 | 608 | out_channels, corr_count |
+| 616 | control_seq, reserved |
 | 640 | `corr[24] {type, freq, gain, q, b0, b1, b2, a1, a2, pad}` |
 | 1600 | `ring_in[4096]`, `ring_out[4096]`: mono taps for the analyser |
 

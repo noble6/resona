@@ -1,6 +1,7 @@
 /*
  * Resona: shared memory contract between the DSP engine and the UI.
  * The UI writes params[] / corr[] then bumps param_seq; the engine writes meters + rings.
+ * control_seq is odd during a UI write; the engine accepts only stable, even snapshots.
  * Layout is mirrored in app/resona/shm.py (offsets verified by tests/test_dsp.c).
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -9,7 +10,7 @@
 #include <stdint.h>
 
 #define RESONA_MAGIC   0x414E5352u /* "RSNA" */
-#define RESONA_VERSION 2u
+#define RESONA_VERSION 3u
 #define RESONA_NPARAMS 128
 #define RESONA_RING    4096
 #define RESONA_NCORR   24
@@ -66,7 +67,8 @@ typedef struct {
     float    ieq_db[RESONA_NBANDS];
     uint32_t out_channels;
     uint32_t corr_count;        /* UI -> engine */
-    float    reserved[6];
+    uint32_t control_seq;       /* UI -> engine publication guard */
+    float    reserved[5];
     resona_corr_t corr[RESONA_NCORR];
     float    ring_in[RESONA_RING];
     float    ring_out[RESONA_RING];
