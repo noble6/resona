@@ -583,6 +583,9 @@ class Backend(QObject):
         self.correctionChanged.emit()
 
     def _set_correction(self, info: dict):
+        info = validation.correction(info)
+        if info is None:
+            raise ValueError("empty correction")
         self._state["correction"] = info
         self._apply({"corr_on": 1, "corr_preamp": info.get("preamp", 0)})
         self._push_correction()
@@ -643,12 +646,16 @@ class Backend(QObject):
             if isinstance(res, Exception):
                 self.toast.emit(f"Download failed: {res}")
                 return
-            pre, filters = correction.parse_parametric(res)
-            if not filters:
-                self.toast.emit("That profile has no parametric EQ")
+            try:
+                pre, filters = correction.parse_parametric(res)
+                if not filters:
+                    self.toast.emit("That profile has no parametric EQ")
+                    return
+                self._set_correction({"name": entry["name"], "source": f"AutoEq · {entry['source']}",
+                                      "kind": "parametric", "filters": filters, "preamp": pre})
+            except ValueError as e:
+                self.toast.emit(f"Invalid correction: {e}")
                 return
-            self._set_correction({"name": entry["name"], "source": f"AutoEq · {entry['source']}",
-                                  "kind": "parametric", "filters": filters, "preamp": pre})
             self.toast.emit(f"{entry['name']} corrected to the Harman target")
         self._async(lambda: correction.autoeq_fetch(entry), done)
 
@@ -668,10 +675,10 @@ class Backend(QObject):
                     raise ValueError("no 'Filter: ON …' lines found")
                 info = {"name": path.stem, "source": "EqualizerAPO / AutoEq file", "kind": "parametric",
                         "filters": filters, "preamp": pre}
+            self._set_correction(info)
         except (OSError, ValueError) as e:
             self.toast.emit(f"Import failed: {e}")
             return
-        self._set_correction(info)
         self.toast.emit(f"Loaded {path.name} · {len(info['filters'])} filters")
 
     @Slot()

@@ -35,10 +35,11 @@ def correction(data):
             raise ValueError(f"correction {key} must be text")
     number(data.get("preamp", 0), -120, 12)
     # Older versions stored every imported section although DSP used only 24.
-    filters = data.get("filters", [])[:24]
-    for section in filters:
+    filters = []
+    for section in data.get("filters", [])[:24]:
         if not isinstance(section, dict):
             raise ValueError("correction filter must be an object")
+        section = dict(section)
         kind = section.get("type")
         if kind == "RAW":
             for key in ("b0", "b1", "b2", "a1", "a2"):
@@ -47,10 +48,15 @@ def correction(data):
                 raise ValueError("unstable correction filter")
         elif kind in ("PK", "LSC", "HSC", "LP", "HP"):
             number(section.get("freq"), 0.01, 384000)
-            number(section.get("gain", 0), -24, 24)
+            gain = section.get("gain", 0)
+            if not isinstance(gain, (int, float)) or isinstance(gain, float) and not math.isfinite(gain):
+                raise ValueError("correction gain must be a finite number")
+            # Match DSP headroom limits, including files saved before validation.
+            section["gain"] = max(-24, min(24, gain))
             number(section.get("q", 0.7071), 0.01, 1000)
         else:
             raise ValueError("unknown correction filter type")
+        filters.append(section)
     return dict(data, filters=filters)
 
 
