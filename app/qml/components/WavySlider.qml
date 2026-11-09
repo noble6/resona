@@ -16,6 +16,25 @@ Item {
     property color activeColor: Theme.primary
     property color trackColor: Theme.secondaryContainer
     signal moved(real value)
+    activeFocusOnTab: true
+    readonly property real minimumValue: from
+    readonly property real maximumValue: to
+    readonly property real keyboardStep: stepSize > 0 ? stepSize : (to - from) / 50
+    Accessible.role: Accessible.Slider
+    Accessible.description: format(value)
+    Accessible.onIncreaseAction: moved(Math.min(to, value + keyboardStep))
+    Accessible.onDecreaseAction: moved(Math.max(from, value - keyboardStep))
+    Keys.onPressed: (event) => {
+        let next = value
+        if (event.key === Qt.Key_Right || event.key === Qt.Key_Up) next += keyboardStep
+        else if (event.key === Qt.Key_Left || event.key === Qt.Key_Down) next -= keyboardStep
+        else if (event.key === Qt.Key_Home) next = from
+        else if (event.key === Qt.Key_End) next = to
+        else return
+        event.accepted = true
+        moved(Math.max(from, Math.min(to, next)))
+    }
+    FocusRing {}
 
     implicitHeight: 44
     implicitWidth: 240
@@ -148,7 +167,7 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         preventStealing: true
-        onPressed: (e) => root.setFromX(e.x)
+        onPressed: (e) => { root.forceActiveFocus(); root.setFromX(e.x) }
         onPositionChanged: (e) => { if (pressed) root.setFromX(e.x) }
         onWheel: (w) => {
             const step = root.stepSize > 0 ? root.stepSize : (root.to - root.from) / 50

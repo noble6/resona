@@ -18,6 +18,7 @@ Column {
         Label { text: root.format(root.value); role: "labelL"; color: Theme.ink; anchors.right: parent.right; emphasized: true }
     }
     WavySlider {
+        Accessible.name: root.label
         width: parent.width
         from: root.from; to: root.to; stepSize: root.stepSize; bipolar: root.bipolar
         value: root.value
