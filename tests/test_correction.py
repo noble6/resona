@@ -39,5 +39,15 @@ class ImpulseTests(unittest.TestCase):
                           np.array([value, 0], dtype="<f4").tobytes())
 
 
+class FilterCapacityTests(unittest.TestCase):
+    def test_ddc_import_respects_dsp_filter_capacity(self):
+        filters = correction.parse_vdc("SR_48000:" + ",".join(["1,0,0,0,0"] * 25), 48000)
+        self.assertEqual(len(filters), 24)
+
+    def test_parametric_import_respects_dsp_filter_capacity(self):
+        _, filters = correction.parse_parametric("Filter: ON PK Fc 1000 Hz Gain 3 dB Q 1\n" * 25)
+        self.assertEqual(len(filters), 24)
+
+
 if __name__ == "__main__":
     unittest.main()

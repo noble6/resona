@@ -26,7 +26,7 @@ def params(data):
 
 
 def correction(data):
-    if data is None:
+    if data is None or data == {}:
         return None
     if not isinstance(data, dict) or not isinstance(data.get("filters", []), list):
         raise ValueError("correction must contain a filter list")
@@ -34,9 +34,8 @@ def correction(data):
         if key in data and not isinstance(data[key], str):
             raise ValueError(f"correction {key} must be text")
     number(data.get("preamp", 0), -120, 12)
-    filters = data.get("filters", [])
-    if len(filters) > 24:
-        raise ValueError("correction supports at most 24 filters")
+    # Older versions stored every imported section although DSP used only 24.
+    filters = data.get("filters", [])[:24]
     for section in filters:
         if not isinstance(section, dict):
             raise ValueError("correction filter must be an object")
@@ -52,7 +51,7 @@ def correction(data):
             number(section.get("q", 0.7071), 0.01, 1000)
         else:
             raise ValueError("unknown correction filter type")
-    return data
+    return dict(data, filters=filters)
 
 
 def snapshot(data):
