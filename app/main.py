@@ -108,6 +108,7 @@ def main() -> int:
         tray.activated.connect(lambda r: show() if r == QSystemTrayIcon.ActivationReason.Trigger else None)
         tray.show()
     win.setProperty("closeToTray", tray is not None)
+    app.setQuitOnLastWindowClosed(tray is None)
 
     if not hidden or tray is None:
         show()
