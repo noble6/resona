@@ -83,10 +83,22 @@ def main() -> int:
         win.requestActivate()
 
     def on_conn():
-        c = server.nextPendingConnection()
-        c.readyRead.connect(show)
+        while server.hasPendingConnections():
+            c = server.nextPendingConnection()
+
+            def receive(socket=c):
+                socket.readAll()
+                show()
+
+            c.readyRead.connect(receive)
+            c.disconnected.connect(c.deleteLater)
+            if c.bytesAvailable():
+                receive()
+            if c.state() == QLocalSocket.LocalSocketState.UnconnectedState:
+                c.deleteLater()
     if server is not None:
         server.newConnection.connect(on_conn)
+        on_conn()
 
     tray = None
     if QSystemTrayIcon.isSystemTrayAvailable() and not shot_dir:
