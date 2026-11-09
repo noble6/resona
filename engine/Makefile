@@ -1,5 +1,5 @@
 CC ?= cc
-CFLAGS ?= -O2 -march=x86-64-v2 -ffast-math -fno-finite-math-only
+CFLAGS ?= -O2 -ffast-math -fno-finite-math-only
 override CFLAGS += -std=c11 -Wall -Wextra -fPIC -fvisibility=hidden
 
 all: resona.so
