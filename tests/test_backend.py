@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
@@ -12,6 +12,20 @@ from resona.backend import Backend
 
 
 class PresetTests(unittest.TestCase):
+    def test_preset_keeps_correction_toggle_and_tuned_preamp(self):
+        params = {}
+        controller = SimpleNamespace(
+            _state={}, _apply=params.update, _push_correction=Mock(), _touch=Mock(),
+            stateChanged=SimpleNamespace(emit=Mock()), toast=SimpleNamespace(emit=Mock()),
+        )
+        controller._restore = MethodType(Backend._restore, controller)
+        controller._set_correction = MethodType(Backend._set_correction, controller)
+        data = {"params": {"corr_on": 0, "corr_preamp": -7},
+                "correction": {"filters": [], "preamp": -3}}
+        Backend._load_preset_data(controller, data, "disabled correction")
+        self.assertEqual(params["corr_on"], 0)
+        self.assertEqual(params["corr_preamp"], -7)
+
     def test_long_legacy_correction_does_not_discard_saved_settings(self):
         section = {"type": "RAW", "b0": 1, "b1": 0, "b2": 0, "a1": 0, "a2": 0}
         saved = {"params": {"bass_amt": 0.8}, "correction": {"filters": [section] * 25}}
