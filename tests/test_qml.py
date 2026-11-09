@@ -59,6 +59,11 @@ class KeyboardTests(unittest.TestCase):
         self.assertFalse(item.property("checked"))
         self.assertEqual(self.window.property("activations"), 2)
 
+    def test_chip_activates_with_keyboard(self):
+        self.load('Chip { objectName: "control"; text: "Music"; onClicked: win.activations++ }')
+        QTest.keyClick(self.window, Qt.Key.Key_Space)
+        self.assertEqual(self.window.property("activations"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

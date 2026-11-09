@@ -15,6 +15,18 @@ Row {
             required property var modelData
             required property int index
             readonly property bool sel: root.current === modelData.key
+            activeFocusOnTab: true
+            Accessible.role: Accessible.RadioButton
+            Accessible.name: modelData.label
+            Accessible.checkable: true
+            Accessible.checked: sel
+            Accessible.onPressAction: root.picked(modelData.key)
+            Keys.onPressed: (event) => {
+                if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) < 0) return
+                event.accepted = true
+                if (!event.isAutoRepeat) root.picked(modelData.key)
+            }
+            FocusRing {}
             readonly property bool first: index === 0
             readonly property bool last: index === root.model.length - 1
             readonly property real outer: height / 2

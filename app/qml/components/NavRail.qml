@@ -34,6 +34,17 @@ Item {
                 required property var modelData
                 required property int index
                 readonly property bool sel: root.current === index
+                activeFocusOnTab: true
+                Accessible.role: Accessible.PageTab
+                Accessible.name: modelData.label
+                Accessible.selected: sel
+                Accessible.onPressAction: root.picked(index)
+                Keys.onPressed: (event) => {
+                    if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) < 0) return
+                    event.accepted = true
+                    if (!event.isAutoRepeat) root.picked(index)
+                }
+                FocusRing {}
                 width: 80; height: 68
                 Rectangle {
                     id: pill
