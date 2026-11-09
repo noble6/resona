@@ -12,6 +12,7 @@ Rectangle {
     Accessible.checkable: true
     Accessible.checked: selected
     Accessible.onPressAction: clicked()
+    Keys.onShortcutOverride: (event) => { if (event.key === Qt.Key_Space) event.accepted = true }
     Keys.onPressed: (event) => {
         if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) < 0) return
         event.accepted = true

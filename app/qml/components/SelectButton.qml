@@ -15,6 +15,7 @@ Rectangle {
     Accessible.expandable: true
     Accessible.expanded: menu.opened
     Accessible.onPressAction: menu.open()
+    Keys.onShortcutOverride: (event) => { if (event.key === Qt.Key_Space) event.accepted = true }
     Keys.onPressed: (event) => {
         if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter, Qt.Key_Down].indexOf(event.key) < 0) return
         event.accepted = true

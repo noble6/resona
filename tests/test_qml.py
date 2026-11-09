@@ -28,6 +28,8 @@ class KeyboardTests(unittest.TestCase):
             Window {{
                 id: win; width: 400; height: 200; visible: true
                 property int activations: 0
+                property int shortcutActivations: 0
+                Shortcut {{ sequence: "Space"; onActivated: win.shortcutActivations++ }}
                 {control}
             }}
         '''.encode())
