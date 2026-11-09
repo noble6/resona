@@ -327,19 +327,29 @@ static void update_fdn_geometry(Resona *r, float size, float damp)
     r->fdn_applied_damp = damp;
 }
 
-/* power response |ipsi|^2 + |contra|^2 at f, from impulse responses */
+static double hrtf_path_power(const hrtf_path *p, double w)
+{
+    int di = (int)p->delay;
+    double cw = cos(w), fr = p->delay - di;
+    double d0 = w * (di & (HRTF_DLY - 1)), d1 = w * ((di + 1) & (HRTF_DLY - 1));
+    double re = (1.0 - fr) * cos(d0) + fr * cos(d1);
+    double im = -(1.0 - fr) * sin(d0) - fr * sin(d1);
+    for (int k = 0; k < 5; k++) {
+        double ph = w * ((di + p->tap[k]) & (HRTF_DLY - 1));
+        re += p->rho[k] * cos(ph);
+        im -= p->rho[k] * sin(ph);
+    }
+    double b0 = p->hs_b0, b1 = p->hs_b1, a1 = p->hs_a1;
+    double num = b0 * b0 + b1 * b1 + 2.0 * b0 * b1 * cw;
+    double den = 1.0 + a1 * a1 + 2.0 * a1 * cw;
+    return num / den * (re * re + im * im);
+}
+
+/* Evaluate the transfer function directly; angle changes must stay cheap in run(). */
 static double hrtf_power(const hrtf_path *a, const hrtf_path *b, double fs, double f)
 {
-    hrtf_state sa, sb; memset(&sa, 0, sizeof sa); memset(&sb, 0, sizeof sb);
-    double ra = 0, ia = 0, rb = 0, ib = 0;
-    for (int n = 0; n < 2048; n++) {
-        float x = n == 0 ? 1.0f : 0.0f;
-        float ya = hrtf_run(a, &sa, x), yb = hrtf_run(b, &sb, x);
-        double ph = -2 * M_PI * f * n / fs;
-        ra += ya * cos(ph); ia += ya * sin(ph);
-        rb += yb * cos(ph); ib += yb * sin(ph);
-    }
-    return ra * ra + ia * ia + rb * rb + ib * ib;
+    double w = 2 * M_PI * f / fs;
+    return hrtf_path_power(a, w) + hrtf_path_power(b, w);
 }
 
 static void update_hrtf(Resona *r, float angle)
