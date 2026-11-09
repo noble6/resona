@@ -107,7 +107,7 @@ Requirements: PipeWire with `pipewire-pulse` and WirePlumber (the default on eve
 ```sh
 sudo pacman -S pyside6 python-numpy gcc make                       # Arch / CachyOS / Manjaro
 sudo dnf install python3-pyside6 python3-numpy gcc make            # Fedora
-sudo apt install python3-pyside6.qtquick python3-numpy gcc make    # Debian 13 / Ubuntu 24.10+
+sudo apt install python3-pyside6.qtquick python3-pyside6.qtwidgets python3-numpy gcc make # Debian 13 / Ubuntu 24.10+
 ```
 
 Arch users can also build `packaging/aur/PKGBUILD`.
