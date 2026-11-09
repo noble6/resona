@@ -148,3 +148,5 @@ finally:
         subprocess.run(["pactl", "unload-module", m])
     check(not pipeline.sink_exists("resona_it_sink"), "engine sink removed after stop")
     print("ALL PASSED" if not fails else f"FAILED ({fails})")
+
+sys.exit(1 if fails else 0)
