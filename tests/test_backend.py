@@ -72,6 +72,56 @@ class UpdateTests(unittest.TestCase):
 
 
 class CorrectionTests(unittest.TestCase):
+    def controller(self):
+        from resona import presets
+
+        params = dict(presets.DEFAULTS, bass_amt=0.8)
+        controller = SimpleNamespace(
+            _state={"profile": "Music"}, _params=params, _auto_base=None,
+            _apply=params.update, _push_correction=Mock(), _touch=Mock(),
+            shm=SimpleNamespace(sample_rate=48000), toast=SimpleNamespace(emit=Mock()),
+        )
+        controller._set_correction = MethodType(Backend._set_correction, controller)
+        return controller
+
+    def test_import_save_reload_normalizes_gain_without_losing_settings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for gain in (-30, 30):
+                with self.subTest(gain=gain):
+                    source = root / "correction.txt"
+                    source.write_text(f"Filter: ON PK Fc 1000 Hz Gain {gain} dB Q 1")
+                    controller = self.controller()
+                    Backend.importCorrection(controller, str(source))
+                    with patch("resona.backend.CONFIG_DIR", root), \
+                            patch("resona.backend.STATE_FILE", root / "state.json"):
+                        Backend._save(controller)
+                        loaded = Backend._load(None)
+                    self.assertEqual(loaded["profile"], "Music")
+                    self.assertEqual(loaded["params"]["bass_amt"], 0.8)
+                    self.assertEqual(loaded["correction"]["filters"][0]["gain"], max(-24, min(24, gain)))
+
+    def test_legacy_gain_is_migrated_without_losing_settings(self):
+        from resona import validation
+
+        source = {"params": {"bass_amt": 0.8}, "correction": {
+            "filters": [{"type": "PK", "freq": 1000, "gain": -30, "q": 1}]}}
+        loaded = validation.state(source)
+        self.assertEqual(loaded["params"]["bass_amt"], 0.8)
+        self.assertEqual(loaded["correction"]["filters"][0]["gain"], -24)
+        self.assertEqual(source["correction"]["filters"][0]["gain"], -30)
+
+    def test_invalid_import_leaves_live_settings_unchanged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "invalid.txt"
+            source.write_text("Filter: ON PK Fc 1000 Hz Gain 3 dB Q 0")
+            controller = self.controller()
+            previous = dict(controller._params)
+            Backend.importCorrection(controller, str(source))
+            self.assertNotIn("correction", controller._state)
+            self.assertEqual(controller._params, previous)
+            self.assertTrue(controller.toast.emit.call_args.args[0].startswith("Import failed:"))
+
     def test_ddc_is_bypassed_at_unsupported_rate_and_restored_at_supported_rate(self):
         controller = SimpleNamespace(
             _state={"correction": {"kind": "vdc", "text": "SR_48000:1,0,0,0,0", "filters": []}},
