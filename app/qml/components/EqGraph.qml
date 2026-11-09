@@ -98,7 +98,24 @@ Item {
             required property int index
             readonly property string key: "eq" + index
             readonly property real gain: audio.params[key] || 0
-            readonly property bool active: ma.pressed || ma.containsMouse
+            readonly property bool active: ma.pressed || ma.containsMouse || activeFocus
+            activeFocusOnTab: true
+            readonly property real value: gain
+            readonly property real minimumValue: -15
+            readonly property real maximumValue: 15
+            Accessible.role: Accessible.Slider
+            Accessible.name: root.fmtF(root.freqs[index]) + " Hz equalizer"
+            Accessible.description: gain.toFixed(1) + " dB"
+            Accessible.onIncreaseAction: audio.setParam(key, Math.min(15, gain + 0.5))
+            Accessible.onDecreaseAction: audio.setParam(key, Math.max(-15, gain - 0.5))
+            Keys.onPressed: (event) => {
+                if (event.key === Qt.Key_Up || event.key === Qt.Key_Right) audio.setParam(key, Math.min(15, gain + 0.5))
+                else if (event.key === Qt.Key_Down || event.key === Qt.Key_Left) audio.setParam(key, Math.max(-15, gain - 0.5))
+                else if (event.key === Qt.Key_Home) audio.setParam(key, 0)
+                else return
+                event.accepted = true
+            }
+            FocusRing { radius: 25 }
             readonly property real curveDb: root.curveAt(root.freqs[index])
             width: 44; height: 44
             x: root.fx(root.freqs[index]) - width / 2

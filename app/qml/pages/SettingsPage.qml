@@ -177,6 +177,19 @@ Page {
                     delegate: MorphShape {
                         required property string modelData
                         readonly property bool sel: audio.accent === modelData
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Accent " + modelData
+                        Accessible.checkable: true
+                        Accessible.checked: sel
+                        Accessible.onPressAction: audio.setAccent(modelData)
+                        Keys.onShortcutOverride: (event) => { if (event.key === Qt.Key_Space) event.accepted = true }
+                        Keys.onPressed: (event) => {
+                            if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) < 0) return
+                            event.accepted = true
+                            if (!event.isAutoRepeat) audio.setAccent(modelData)
+                        }
+                        FocusRing { radius: 35 }
                         width: 64; height: 64
                         shape: sel ? "cookie9" : "circle"
                         spinning: sel
