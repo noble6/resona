@@ -304,7 +304,7 @@ Page {
                              Icon { anchors.centerIn: parent; name: "waves"; size: 26; color: Theme.inkPrimary } }
                 Column { Layout.fillWidth: true
                     Label { text: "Resona " + audio.version + " · open source (GPL-3.0)"; role: "titleM"; emphasized: true }
-                    Label { text: "Native DSP engine · " + (audio.sampleRate / 1000) + " kHz · " + audio.outputLayout.name + " · 1.5 ms latency"
+                    Label { text: "Native DSP engine · " + (audio.sampleRate / 1000) + " kHz · " + audio.outputLayout.name + " · 1.5 ms lookahead"
                             role: "body"; color: Theme.inkVariant } }
             }
         }
