@@ -1004,13 +1004,13 @@ class Backend(QObject):
             kind = updater.install_kind()
             if not manual and self._state.get("update_auto", True) and kind == "user":
                 self.toast.emit(f"Updating Resona to {res['version']}")
-                self.installUpdate()
+                self.installUpdate(automatic=True)
             elif not manual:
                 self.toast.emit(f"Resona {res['version']} is available. Open Settings to update")
         self._async(updater.check, done)
 
     @Slot()
-    def installUpdate(self):
+    def installUpdate(self, automatic: bool = False):
         if self._upd["state"] != "available" or not self._upd_info:
             return
         self._set_upd(state="installing", message=f"Downloading and building {self._upd_info['version']}…")
@@ -1023,7 +1023,7 @@ class Backend(QObject):
             self._relaunch = res
             self._set_upd(state="restarting", message=f"Installed {self._upd_info['version']}. Restarting Resona…")
             self._restart_timer.start()
-            self._try_restart(force=self._visuals)
+            self._try_restart(force=not automatic)
         self._async(lambda: updater.install(self._upd_info), done)
 
     def _try_restart(self, force: bool = False):
