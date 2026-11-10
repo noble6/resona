@@ -8,6 +8,7 @@ import shlex
 import shutil
 import subprocess
 import tarfile
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -71,25 +72,25 @@ def install(info: dict) -> str:
     url = info.get("tarball", "")
     if not url.startswith(f"https://api.github.com/repos/{REPO}/"):
         raise RuntimeError("Unexpected download location")
-    shutil.rmtree(CACHE, ignore_errors=True)
-    CACHE.mkdir(parents=True)
-    archive = CACHE / "release.tar.gz"
-    with _get(url, timeout=60) as r, open(archive, "wb") as f:
-        shutil.copyfileobj(r, f)
-    src = CACHE / "src"
-    with tarfile.open(archive) as t:
-        t.extractall(src, filter="data")
-    roots = [p for p in src.iterdir() if p.is_dir()]
-    if len(roots) != 1 or not (roots[0] / "install.sh").is_file():
-        raise RuntimeError("Release archive has an unexpected layout")
-    prefix = APP_DIR.parent.parent
-    env = dict(os.environ, PREFIX=str(prefix))
-    r = subprocess.run(["sh", str(roots[0] / "install.sh")], cwd=roots[0], env=env,
-                       capture_output=True, text=True, timeout=600)
-    if r.returncode != 0:
-        tail = (r.stderr or r.stdout).strip().splitlines()[-3:]
-        raise RuntimeError("Install failed: " + " ".join(tail))
-    shutil.rmtree(CACHE, ignore_errors=True)
+    CACHE.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="release-", dir=CACHE) as directory:
+        workspace = Path(directory)
+        archive = workspace / "release.tar.gz"
+        with _get(url, timeout=60) as r, open(archive, "wb") as f:
+            shutil.copyfileobj(r, f)
+        src = workspace / "src"
+        with tarfile.open(archive) as t:
+            t.extractall(src, filter="data")
+        roots = [p for p in src.iterdir() if p.is_dir()]
+        if len(roots) != 1 or not (roots[0] / "install.sh").is_file():
+            raise RuntimeError("Release archive has an unexpected layout")
+        prefix = APP_DIR.parent.parent
+        env = dict(os.environ, PREFIX=str(prefix))
+        r = subprocess.run(["sh", str(roots[0] / "install.sh")], cwd=roots[0], env=env,
+                           capture_output=True, text=True, timeout=600)
+        if r.returncode != 0:
+            tail = (r.stderr or r.stdout).strip().splitlines()[-3:]
+            raise RuntimeError("Install failed: " + " ".join(tail))
     return str(prefix / "bin" / "resona")
 
 

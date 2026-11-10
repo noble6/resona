@@ -27,6 +27,7 @@ jobs:
       - name: Unit tests
         run: |
           python tests/test_units.py
+          python tests/test_updater.py
           python tests/test_backend.py
           python tests/test_pipeline.py
           python tests/test_correction.py
