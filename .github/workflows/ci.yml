@@ -12,7 +12,8 @@ jobs:
       - name: DSP test suite (44.1/48/96/192 kHz)
         run: make -C engine test CC=${{ matrix.cc }}
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       matrix: { python: ["3.10", "3.12", "3.14"] }
     steps:
@@ -20,7 +21,13 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "${{ matrix.python }}" }
       - name: Install Qt runtime libraries
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0
+        timeout-minutes: 5
+        run: |
+          # Avoid stalled Azure mirrors while retaining Ubuntu's signed repositories.
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          sudo apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends libegl1 libopengl0
       - run: pip install numpy PySide6
       - name: Compile check
         run: python -m py_compile app/main.py app/resona/*.py packaging/install.py tests/*.py
@@ -48,12 +55,20 @@ jobs:
           CFLAGS="-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer"
           TEST_CFLAGS="-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer"
   pipewire:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: sudo apt-get update && sudo apt-get install -y pipewire pipewire-pulse wireplumber pulseaudio-utils libegl1 libopengl0
+      - name: Install PipeWire and Qt runtime libraries
+        timeout-minutes: 5
+        run: |
+          # Avoid stalled Azure mirrors while retaining Ubuntu's signed repositories.
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          sudo apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends pipewire pipewire-pulse wireplumber pulseaudio-utils libegl1 libopengl0
       - run: pip install numpy PySide6
       - run: make -C engine
       - name: Live tests on isolated PipeWire server
