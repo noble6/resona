@@ -23,11 +23,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0
       - run: pip install numpy PySide6
       - name: Compile check
-        run: python -m py_compile app/main.py app/resona/*.py tests/*.py
+        run: python -m py_compile app/main.py app/resona/*.py packaging/install.py tests/*.py
       - name: Unit tests
         run: |
           python tests/test_units.py
           python tests/test_updater.py
+          python tests/test_install.py
           python tests/test_backend.py
           python tests/test_pipeline.py
           python tests/test_correction.py
