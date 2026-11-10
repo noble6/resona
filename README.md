@@ -119,7 +119,14 @@ replacing installed files. Installs to the same prefix are serialized. Publicati
 errors and catchable interruption signals restore the previous artifacts; if
 recovery fails, the error reports retained backup workspaces for manual recovery.
 Replacement is sequential, not an atomic switch of the entire installation.
-Power loss and `SIGKILL` are not covered by rollback.
+A private transaction journal and flushed files/directories support recovery on
+the next installer invocation after `SIGKILL` or a system crash: unfinished
+publication restores previous artifacts; a committed transaction finishes cleanup.
+Recovery is repeatable if interrupted again. Unsafe or missing recovery data stops
+installation for manual recovery. Crash durability still depends on the filesystem
+and storage honoring flushes; no process can recover an installation while the
+machine is powered off. Interrupted staging can leave unused private temporary
+files if the process dies before recording their paths.
 
 Self-updates require a current [GitHub CLI](https://cli.github.com/) with
 `gh attestation verify` and `--source-digest` support. Resona accepts only stable

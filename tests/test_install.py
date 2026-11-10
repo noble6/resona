@@ -1,5 +1,6 @@
 """Installer regression tests; never touch the user's installation or audio server."""
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shlex
@@ -111,9 +112,10 @@ class InstallTests(unittest.TestCase):
 
                 def fail_once(source, destination):
                     nonlocal count
-                    count += 1
-                    if count == failed_call:
-                        raise PermissionError("injected publish permission failure")
+                    if Path(source).name == "new" or Path(destination).name == "previous":
+                        count += 1
+                        if count == failed_call:
+                            raise PermissionError("injected publish permission failure")
                     return replace(source, destination)
 
                 with self.subTest(existing=existing, failed_call=failed_call), \
@@ -298,6 +300,129 @@ module.install(Path(sys.argv[2]), Path(sys.argv[3]))
             self.assertFalse((self.prefix / relative).exists(), relative)
         self.assertEqual(settings.read_text(), '{"keep": true}')
         self.assert_clean()
+
+    def crash(self, mode, index=1):
+        code = '''
+import importlib.util, os, signal, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("installer", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+mode, index = sys.argv[4], int(sys.argv[5])
+replace, write_journal, rmtree = os.replace, module.journal, module.shutil.rmtree
+count = 0
+def kill():
+    os.kill(os.getpid(), signal.SIGKILL)
+def stopped_replace(source, destination):
+    global count
+    replace(source, destination)
+    match = ((mode == "publish" and Path(source).name == "new") or
+             (mode == "backup" and Path(destination).name == "previous") or
+             (mode == "recovery" and Path(source).name == "previous"))
+    if match:
+        count += 1
+        if count == index:
+            kill()
+def stopped_journal(prefix, phase, entries):
+    write_journal(prefix, phase, entries)
+    if (mode == "staging" and phase == "staging") or (mode == "committed" and phase == "committed"):
+        kill()
+def stopped_cleanup(path, *args, **kwargs):
+    rmtree(path, *args, **kwargs)
+    if mode == "cleanup" and Path(path).name.startswith(".resona-install-"):
+        kill()
+module.os.replace = stopped_replace
+module.journal = stopped_journal
+module.shutil.rmtree = stopped_cleanup
+if mode == "recovery":
+    with module.prefix_lock(Path(sys.argv[3])):
+        module.recover(Path(sys.argv[3]))
+else:
+    module.install(Path(sys.argv[2]), Path(sys.argv[3]))
+'''
+        result = subprocess.run([sys.executable, "-c", code, str(ROOT / "packaging/install.py"),
+                                 str(self.source), str(self.prefix), mode, str(index)],
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, -9, result.stderr)
+        self.assertTrue((self.prefix / installer.JOURNAL).is_file())
+
+    def recover(self):
+        with installer.prefix_lock(self.prefix):
+            installer.recover(self.prefix)
+            installer.recover(self.prefix)
+        self.assertFalse((self.prefix / installer.JOURNAL).exists())
+        self.assert_clean()
+
+    def test_sigkill_at_each_publication_boundary_recovers_previous_files(self):
+        for existing in (False, True):
+            for mode in (("publish", "backup") if existing else ("publish",)):
+                for index in range(1, len(ARTIFACTS) + 1):
+                    with self.subTest(existing=existing, mode=mode, index=index):
+                        self.prefix = self.root / f"case-{existing}-{mode}-{index}"
+                        self.prefix.mkdir()
+                        (self.prefix / "unrelated").write_text("keep")
+                        if existing:
+                            self.seed_previous()
+                        before = self.snapshot()
+                        self.crash(mode, index)
+                        self.recover()
+                        self.assertEqual(self.snapshot(), before)
+
+    def test_sigkill_during_staging_leaves_installed_files_unchanged(self):
+        self.seed_previous()
+        before = self.snapshot()
+        self.crash("staging")
+        self.recover()
+        self.assertEqual(self.snapshot(), before)
+
+    def test_recovery_is_idempotent_after_it_is_killed(self):
+        self.seed_previous()
+        before = self.snapshot()
+        self.crash("publish")
+        self.crash("recovery")
+        self.recover()
+        self.assertEqual(self.snapshot(), before)
+
+    def test_committed_recovery_finishes_cleanup_without_reverting_new_files(self):
+        for mode in ("committed", "cleanup"):
+            with self.subTest(mode=mode):
+                self.prefix = self.root / mode
+                self.prefix.mkdir()
+                (self.prefix / "unrelated").write_text("keep")
+                self.seed_previous()
+                self.crash(mode)
+                self.recover()
+                self.assertEqual((self.prefix / "lib/resona/resona.so").read_bytes(), b"new plugin")
+                self.assertTrue((self.prefix / "share/resona/main.py").exists())
+                self.assertFalse((self.prefix / "share/resona/old.py").exists())
+
+    def test_next_install_recovers_before_attempting_new_staging(self):
+        self.seed_previous()
+        before = self.snapshot()
+        self.crash("publish", 3)
+        (self.source / "engine/resona.so").unlink()
+        with self.assertRaises(FileNotFoundError):
+            installer.install(self.source, self.prefix)
+        self.assertEqual(self.snapshot(), before)
+        self.assert_clean()
+
+    def test_unsafe_journal_cannot_delete_external_files(self):
+        outside = self.root / "outside"
+        outside.mkdir()
+        sentinel = outside / "keep"
+        sentinel.write_text("keep outside")
+        (self.prefix / "bin").mkdir()
+        (self.prefix / "bin/.resona-install-link").symlink_to(outside, target_is_directory=True)
+        path = self.prefix / installer.JOURNAL
+        for target, workspace in (("unrelated", "bin/.resona-install-bad"),
+                                  ("bin/resona", str(outside)), ("bin/resona", "../outside"),
+                                  ("bin/resona", "bin/.resona-install-link")):
+            with self.subTest(target=target, workspace=workspace):
+                path.write_text(json.dumps(dict(version=1, phase="staging", entries=[[target, workspace, False]])))
+                with installer.prefix_lock(self.prefix), self.assertRaises(RuntimeError):
+                    installer.recover(self.prefix)
+                self.assertEqual(sentinel.read_text(), "keep outside")
+        path.unlink()
 
 
 if __name__ == "__main__":
