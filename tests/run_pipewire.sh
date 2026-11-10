@@ -16,6 +16,7 @@ export PIPEWIRE_RUNTIME_DIR="$runtime"
 export PIPEWIRE_REMOTE=pipewire-0
 export PULSE_SERVER="unix:$runtime/pulse/native"
 export QT_QPA_PLATFORM=offscreen
+export RESONA_TEST_PRIVATE_SERVER=1
 unset PIPEWIRE_CONFIG_DIR PIPEWIRE_CONFIG_NAME PULSE_CLIENTCONFIG
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME"
 pids=()
@@ -66,6 +67,7 @@ pactl set-default-sink ci_hardware
 python3 tests/test_pipewire.py
 python3 tests/test_capture_live.py
 python3 tests/test_routing_live.py
+python3 tests/test_lifecycle_live.py --soak-seconds "${RESONA_SOAK_SECONDS:-8}"
 
 RESONA_SCREENSHOT="$runtime/screenshots" RESONA_SHM="$runtime/ui-shm" \
     RESONA_TEST_TARGET=ci_hardware python3 "${RESONA_TEST_APP:-app/main.py}" > "$runtime/ui.log" 2>&1

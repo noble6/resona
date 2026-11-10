@@ -188,6 +188,20 @@ python3 tests/test_capture_live.py   # games that bypass the default device get 
 bash tests/run_pipewire.sh          # all live suites and UI smoke test on a private audio server
 ```
 
+The private-server harness also stress-tests repeated and rapid output choices,
+virtual-device removal/reappearance, recovery after killing its own child engine,
+44.1/48/96 kHz graph rates, finite samples/meters, and an 8-second processing soak.
+It does not use desktop audio. For a longer isolated soak, run:
+
+```sh
+RESONA_SOAK_SECONDS=600 bash tests/run_pipewire.sh
+```
+
+The soak accepts 1–3600 seconds and writes audio in bounded chunks. Use the shell
+harness directly for long runs; the CI isolation wrapper has a 180-second timeout.
+Physical USB/Bluetooth unplugging, suspend/resume, and real-device long-session
+checks remain manual; the virtual fixtures do not validate those hardware paths.
+
 For an opt-in end-to-end release check:
 
 ```sh
