@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 from resona.backend import Backend
+from resona.updates import UpdateController
 
 
 class PresetTests(unittest.TestCase):
@@ -63,12 +64,26 @@ class UpdateTests(unittest.TestCase):
         for automatic in (False, True):
             controller = SimpleNamespace(
                 _upd={"state": "available"}, _upd_info={"version": "9.0"},
-                _visuals=True, _processing=True, _set_upd=Mock(),
+                _closed=False, _set_upd=Mock(),
                 _restart_timer=SimpleNamespace(start=Mock()), _try_restart=Mock(),
                 _async=lambda work, done: done("/unused/resona"),
             )
-            Backend.installUpdate(controller, automatic=automatic)
+            UpdateController.installUpdate(controller, automatic=automatic)
             controller._try_restart.assert_called_once_with(force=not automatic)
+
+    def test_backend_update_slots_delegate_without_changing_arguments(self):
+        service = Mock()
+        controller = SimpleNamespace(_updates=service)
+        Backend.checkUpdates(controller)
+        service.checkUpdates.assert_called_once_with()
+        Backend.installUpdate(controller)
+        Backend.installUpdate(controller, automatic=True)
+        self.assertEqual(service.installUpdate.call_args_list, [unittest.mock.call(automatic=False),
+                                                               unittest.mock.call(automatic=True)])
+        Backend.setUpdateFreq(controller, "monthly")
+        service.setUpdateFreq.assert_called_once_with("monthly")
+        Backend.setUpdateAuto(controller, False)
+        service.setUpdateAuto.assert_called_once_with(False)
 
 
 class CorrectionTests(unittest.TestCase):
