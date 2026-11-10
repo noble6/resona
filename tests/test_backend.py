@@ -162,6 +162,57 @@ class AppearanceTests(unittest.TestCase):
         controller._touch.assert_called_once_with()
 
 
+class OutputRequestTests(unittest.TestCase):
+    def test_busy_start_keeps_the_inflight_generation(self):
+        controller = SimpleNamespace(_busy=True, _output_request=2, _start_output_request=1,
+                                     _ir_timer=SimpleNamespace(start=Mock()))
+        Backend.startEngine(controller)
+        self.assertEqual(controller._start_output_request, 1)
+        controller._ir_timer.start.assert_called_once_with()
+
+    def controller(self, requested, started):
+        return SimpleNamespace(
+            _state={"output": requested, "last_target": "previous"},
+            _start_output_request=1, _output_request=1 if requested == started else 2,
+            _device_switched=Mock(), _touch=Mock(), _sync_volume=Mock(),
+            _app_timer=SimpleNamespace(start=Mock()), stateChanged=SimpleNamespace(emit=Mock()),
+        )
+
+    def test_completed_start_does_not_overwrite_a_newer_output_request(self):
+        controller = self.controller("latest-choice", "starting-choice")
+        Backend._on_started(controller, True, "starting-choice")
+        self.assertEqual(controller._state["output"], "latest-choice")
+        self.assertEqual(controller._state["last_target"], "starting-choice")
+        controller._device_switched.assert_called_once_with("previous", "starting-choice")
+
+    def test_normal_start_updates_output_to_selected_fallback(self):
+        controller = self.controller("missing-device", "missing-device")
+        Backend._on_started(controller, True, "fallback-device")
+        self.assertEqual(controller._state["output"], "fallback-device")
+
+    def test_returning_output_request_is_not_replaced_by_inflight_fallback(self):
+        controller = self.controller("returning-device", "returning-device")
+        controller._start_output_request = 1
+        controller._output_request = 2
+        Backend._on_started(controller, True, "temporary-fallback")
+        self.assertEqual(controller._state["output"], "returning-device")
+
+    def test_reselecting_inflight_target_cancels_another_pending_choice(self):
+        controller = SimpleNamespace(_state={"output": "queued-choice"},
+                                     _output_request=1, pipe=SimpleNamespace(target="starting-choice"), startEngine=Mock())
+        Backend.setOutput(controller, "starting-choice")
+        self.assertEqual(controller._state["output"], "starting-choice")
+        self.assertEqual(controller._output_request, 2)
+        controller.startEngine.assert_called_once_with()
+
+    def test_reselecting_unchanged_output_does_not_restart(self):
+        controller = SimpleNamespace(_state={"output": "same"}, _output_request=1,
+                                     pipe=SimpleNamespace(target="same"), startEngine=Mock())
+        Backend.setOutput(controller, "same")
+        controller.startEngine.assert_not_called()
+        self.assertEqual(controller._output_request, 1)
+
+
 class PersistenceTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

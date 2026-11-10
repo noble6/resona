@@ -71,6 +71,7 @@ class Backend(QObject):
 
         self._running = False
         self._busy = False
+        self._output_request = 0
         self._quiet_until = 0.0
         self._status = "Starting engine…"
         self._sinks: list[dict] = []
@@ -173,6 +174,7 @@ class Backend(QObject):
         if self._busy:
             self._ir_timer.start()  # try again once the current start settles
             return
+        self._start_output_request = self._output_request
         target = self._pick_target()
         layout = hardware.layout_of(pipeline.sink_channel_map(target)) if target else hardware.layout_of("")
         ir = None
@@ -205,7 +207,9 @@ class Backend(QObject):
             prev = self._state.get("last_target")
             if info and prev != info:
                 self._device_switched(prev, info)
-            self._state["output"] = info
+            # Do not overwrite an output choice made while this startup was pending.
+            if self._output_request == self._start_output_request:
+                self._state["output"] = info
             self._state["last_target"] = info
             self._status = "Ready"
             self._touch()
@@ -930,7 +934,8 @@ class Backend(QObject):
 
     @Slot(str)
     def setOutput(self, name: str):
-        if name and name != self.pipe.target:
+        if name and (name != self.pipe.target or self._state.get("output") != name):
+            self._output_request += 1
             self._state["output"] = name
             self.startEngine()
 
