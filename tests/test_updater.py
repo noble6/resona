@@ -14,6 +14,11 @@ from resona import updater
 
 
 class UpdateTests(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.object(updater.release, "verify")
+        self.verifier = patcher.start()
+        self.addCleanup(patcher.stop)
+
     def archive(self, extra=None):
         data = io.BytesIO()
         with tarfile.open(fileobj=data, mode="w:gz") as archive:
@@ -28,9 +33,10 @@ class UpdateTests(unittest.TestCase):
                 archive.addfile(extra)
         return data.getvalue()
 
-    def info(self):
-        return {"version": "9.0.0", "tag": "v9.0.0",
-                "tarball": f"https://api.github.com/repos/{updater.REPO}/tarball/v9.0.0"}
+    def info(self, tag="v9.0.0"):
+        archive, bundle = updater.release.urls(tag)
+        return {"version": tag.lstrip("vV"), "tag": tag, "commit": "a" * 40,
+                "tarball": archive, "attestation": bundle}
 
     def test_workspace_is_private_and_removed_after_success(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -51,7 +57,7 @@ class UpdateTests(unittest.TestCase):
             with patch.object(updater, "CACHE", cache), \
                     patch.object(updater, "APP_DIR", prefix / "share/resona"), \
                     patch.object(updater, "install_kind", return_value="user"), \
-                    patch.object(updater, "_get", return_value=io.BytesIO(self.archive())), \
+                    patch.object(updater, "_get", side_effect=lambda *a, **kw: io.BytesIO(self.archive())), \
                     patch.object(updater.subprocess, "run", side_effect=install):
                 self.assertEqual(updater.install(self.info()), str(prefix / "bin/resona"))
             self.assertEqual(sentinel.read_text(), "keep")
@@ -67,7 +73,7 @@ class UpdateTests(unittest.TestCase):
             sentinel.write_text("keep")
             with patch.object(updater, "CACHE", cache), \
                     patch.object(updater, "install_kind", return_value="user"), \
-                    patch.object(updater, "_get", return_value=io.BytesIO(self.archive())), \
+                    patch.object(updater, "_get", side_effect=lambda *a, **kw: io.BytesIO(self.archive())), \
                     patch.object(updater.subprocess, "run", side_effect=subprocess.TimeoutExpired("install", 600)):
                 with self.assertRaises(subprocess.TimeoutExpired):
                     updater.install(self.info())
@@ -79,7 +85,7 @@ class UpdateTests(unittest.TestCase):
             cache = Path(directory) / "cache"
             with patch.object(updater, "CACHE", cache), \
                     patch.object(updater, "install_kind", return_value="user"), \
-                    patch.object(updater, "_get", return_value=io.BytesIO(archive)), \
+                    patch.object(updater, "_get", side_effect=lambda *a, **kw: io.BytesIO(archive)), \
                     patch.object(updater.subprocess, "run") as install, \
                     patch.multiple(updater, **limits):
                 with self.assertRaisesRegex(RuntimeError, message):
@@ -135,13 +141,12 @@ class UpdateTests(unittest.TestCase):
                 install.assert_not_called()
 
     def test_source_version_mismatch_never_runs_installer(self):
-        info = self.info() | {"tag": "v8.0.0", "version": "8.0.0",
-                              "tarball": f"https://api.github.com/repos/{updater.REPO}/tarball/v8.0.0"}
+        info = self.info("v8.0.0")
         with tempfile.TemporaryDirectory() as directory:
             cache = Path(directory) / "cache"
             with patch.object(updater, "CACHE", cache), \
                     patch.object(updater, "install_kind", return_value="user"), \
-                    patch.object(updater, "_get", return_value=io.BytesIO(self.archive())), \
+                    patch.object(updater, "_get", side_effect=lambda *a, **kw: io.BytesIO(self.archive())), \
                     patch.object(updater.subprocess, "run") as install:
                 with self.assertRaisesRegex(RuntimeError, "source version"):
                     updater.install(info)
@@ -149,11 +154,15 @@ class UpdateTests(unittest.TestCase):
             self.assertEqual(list(cache.iterdir()), [])
 
     def test_check_validates_github_metadata(self):
-        release = {"tag_name": "v9.0.0", "tarball_url": self.info()["tarball"]}
-        with patch.object(updater, "_get", return_value=io.BytesIO(json.dumps(release).encode())):
+        release = {"tag_name": "v9.0.0", "tarball_url": f"https://api.github.com/repos/{updater.REPO}/tarball/v9.0.0",
+                   "assets": [{"name": url.rsplit("/", 1)[1], "browser_download_url": url, "state": "uploaded"}
+                              for url in (self.info()["tarball"], self.info()["attestation"])]}
+        responses = [release, {"object": {"type": "commit", "sha": "a" * 40}}]
+        with patch.object(updater, "_get", side_effect=lambda *a, **kw: io.BytesIO(json.dumps(responses.pop(0)).encode())):
             info = updater.check()
         self.assertTrue(info["available"])
         self.assertEqual(info["version"], "9.0.0")
+        self.assertEqual(info["commit"], "a" * 40)
         release["tarball_url"] = "https://example.com/not-this-project"
         with patch.object(updater, "_get", return_value=io.BytesIO(json.dumps(release).encode())):
             with self.assertRaisesRegex(RuntimeError, "download location"):
@@ -165,6 +174,45 @@ class UpdateTests(unittest.TestCase):
                     patch.object(updater, "_get", return_value=io.BytesIO(json.dumps(response).encode())):
                 with self.assertRaisesRegex(RuntimeError, "stable published release"):
                     updater.check()
+
+    def test_failed_attestation_never_extracts_or_runs_installer(self):
+        self.verifier.side_effect = RuntimeError("invalid attestation")
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(updater, "CACHE", Path(directory)), \
+                    patch.object(updater, "install_kind", return_value="user"), \
+                    patch.object(updater, "_get", side_effect=lambda *a, **kw: io.BytesIO(self.archive())), \
+                    patch.object(updater, "_extract") as extract, \
+                    patch.object(updater.subprocess, "run") as installer:
+                with self.assertRaisesRegex(RuntimeError, "invalid attestation"):
+                    updater.install(self.info())
+                extract.assert_not_called()
+                installer.assert_not_called()
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_attestation_download_has_its_own_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(updater, "CACHE", Path(directory)), \
+                    patch.object(updater, "install_kind", return_value="user"), \
+                    patch.object(updater, "_get", side_effect=lambda *a, **kw: io.BytesIO(self.archive())), \
+                    patch.object(updater.release, "MAX_BUNDLE_BYTES", 8), \
+                    patch.object(updater.subprocess, "run") as installer:
+                with self.assertRaisesRegex(RuntimeError, "size limit"):
+                    updater.install(self.info())
+                self.verifier.assert_not_called()
+                installer.assert_not_called()
+
+    def test_current_unsigned_release_does_not_request_an_attestation(self):
+        metadata = {"tag_name": "v" + updater.__version__,
+                    "tarball_url": f"https://api.github.com/repos/{updater.REPO}/tarball/v{updater.__version__}"}
+        with patch.object(updater, "_get", return_value=io.BytesIO(json.dumps(metadata).encode())) as get:
+            self.assertFalse(updater.check()["available"])
+            get.assert_called_once_with(updater.API)
+
+    def test_new_unsigned_release_is_not_offered_as_an_installable_update(self):
+        metadata = {"tag_name": "v9.0.0", "tarball_url": f"https://api.github.com/repos/{updater.REPO}/tarball/v9.0.0"}
+        with patch.object(updater, "_get", return_value=io.BytesIO(json.dumps(metadata).encode())):
+            with self.assertRaisesRegex(RuntimeError, "lacks attested update files"):
+                updater.check()
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path, PurePosixPath
 
-from . import __version__
+from . import __version__, release
 
 REPO = "noble6/resona"
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
@@ -46,22 +46,13 @@ def _get(url: str, timeout: float = 15):
 
 
 def _release_download(info: dict) -> str:
-    tag = info.get("tag", "")
-    if not isinstance(tag, str) or not re.fullmatch(r"[vV]?\d+\.\d+\.\d+", tag):
-        raise RuntimeError("Unexpected release tag")
-    if info.get("version") != tag.lstrip("vV"):
-        raise RuntimeError("Release tag and version do not match")
-    expected = f"https://api.github.com/repos/{REPO}/tarball/{tag}"
-    if info.get("tarball") != expected:
-        raise RuntimeError("Unexpected download location")
-    return expected
+    return release.validate_info(info)
 
 
 def check() -> dict:
     """Latest release info. Raises on network errors."""
     try:
-        with _get(API) as r:
-            rel = json.load(r)
+        rel = release.read_json(_get, API)
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return {"available": False, "version": __version__, "notes": "", "tag": ""}
@@ -69,9 +60,9 @@ def check() -> dict:
     if not isinstance(rel, dict) or rel.get("draft") or rel.get("prerelease"):
         raise RuntimeError("Expected a stable published release")
     tag = rel.get("tag_name", "")
-    if not isinstance(tag, str):
-        raise RuntimeError("Unexpected release tag")
-    latest = tag.lstrip("vV")
+    latest = release.version(tag)
+    if rel.get("tarball_url") != f"https://api.github.com/repos/{REPO}/tarball/{tag}":
+        raise RuntimeError("Unexpected download location")
     info = {
         "available": version_tuple(latest) > version_tuple(__version__),
         "version": latest, "tag": tag,
@@ -80,7 +71,9 @@ def check() -> dict:
         "url": rel.get("html_url", f"https://github.com/{REPO}/releases"),
         "tarball": rel.get("tarball_url", ""),
     }
-    _release_download(info)
+    if info["available"]:
+        info.update(release.update_files(_get, rel, tag))
+        _release_download(info)
     return info
 
 
@@ -94,7 +87,8 @@ def _copy_limited(source, destination, limit: int, message: str) -> int:
     return total
 
 
-def _download(url: str, destination: Path) -> None:
+def _download(url: str, destination: Path, limit: int | None = None) -> None:
+    limit = MAX_DOWNLOAD_BYTES if limit is None else limit
     with _get(url, timeout=60) as response:
         length = getattr(response, "headers", {}).get("Content-Length")
         if length is not None:
@@ -102,10 +96,10 @@ def _download(url: str, destination: Path) -> None:
                 length = int(length)
             except ValueError as e:
                 raise RuntimeError("Invalid update download length") from e
-            if length < 0 or length > MAX_DOWNLOAD_BYTES:
+            if length < 0 or length > limit:
                 raise RuntimeError("Update download exceeds the size limit")
         with destination.open("wb") as output:
-            total = _copy_limited(response, output, MAX_DOWNLOAD_BYTES,
+            total = _copy_limited(response, output, limit,
                                   "Update download exceeds the size limit")
         if length is not None and total != length:
             raise RuntimeError("Update download is incomplete")
@@ -149,6 +143,9 @@ def install(info: dict) -> str:
         workspace = Path(directory)
         archive = workspace / "release.tar.gz"
         _download(url, archive)
+        bundle = workspace / "release.sigstore.json"
+        _download(info["attestation"], bundle, release.MAX_BUNDLE_BYTES)
+        release.verify(archive, bundle, info)
         src = workspace / "src"
         _extract(archive, src)
         roots = list(src.iterdir())

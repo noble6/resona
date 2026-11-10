@@ -313,6 +313,12 @@ class UpdateControllerTests(unittest.TestCase):
                 service.close()
                 dispatcher._call.disconnect(dispatch)
 
+    def test_authenticity_errors_are_not_reported_as_network_errors(self):
+        self.service.checkUpdates()
+        self.complete(RuntimeError("Release lacks attested update files"))
+        self.assertEqual(self.service.updateInfo["state"], "error")
+        self.assertEqual(self.service.updateInfo["message"], "Release lacks attested update files")
+
 
 if __name__ == "__main__":
     unittest.main()
