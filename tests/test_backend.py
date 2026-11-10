@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 from resona.backend import Backend
+from resona import persistence, presets
 from resona.updates import UpdateController
 
 
@@ -33,7 +34,7 @@ class PresetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.json"
             path.write_text(json.dumps(saved))
-            with patch("resona.backend.STATE_FILE", path):
+            with patch("resona.persistence.STATE_FILE", path):
                 loaded = Backend._load(None)
         self.assertEqual(loaded["params"]["bass_amt"], 0.8)
         self.assertEqual(len(loaded["correction"]["filters"]), 24)
@@ -108,8 +109,7 @@ class CorrectionTests(unittest.TestCase):
                     source.write_text(f"Filter: ON PK Fc 1000 Hz Gain {gain} dB Q 1")
                     controller = self.controller()
                     Backend.importCorrection(controller, str(source))
-                    with patch("resona.backend.CONFIG_DIR", root), \
-                            patch("resona.backend.STATE_FILE", root / "state.json"):
+                    with patch("resona.persistence.STATE_FILE", root / "state.json"):
                         Backend._save(controller)
                         loaded = Backend._load(None)
                     self.assertEqual(loaded["profile"], "Music")
@@ -160,6 +160,131 @@ class AppearanceTests(unittest.TestCase):
         self.assertTrue(controller._state["reduced_motion"])
         controller.stateChanged.emit.assert_called_once_with()
         controller._touch.assert_called_once_with()
+
+
+class PersistenceTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.state_file = self.root / "state.json"
+        self.preset_dir = self.root / "presets"
+        for name, value in (("STATE_FILE", self.state_file), ("PRESET_DIR", self.preset_dir)):
+            patcher = patch.object(persistence, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.params = dict(presets.DEFAULTS, bass_amt=0.4, sysvol_db=-6, layout=2)
+        self.controller = SimpleNamespace(
+            _state={"profile": "Music"}, _params=self.params, _auto_base=None,
+            profile="Music", deviceMode="headphones", modified=True, eqPreset="Flat",
+            _apply=self.params.update, _set_correction=Mock(), clearCorrection=Mock(),
+            stateChanged=SimpleNamespace(emit=Mock()), presetsChanged=SimpleNamespace(emit=Mock()),
+            toast=SimpleNamespace(emit=Mock()),
+        )
+        for name in ("_snapshot", "_restore", "_preset_path", "_load_preset_data"):
+            setattr(self.controller, name, MethodType(getattr(Backend, name), self.controller))
+
+    def test_state_save_excludes_transient_controls_and_reloads(self):
+        Backend._save(self.controller)
+        saved = persistence.load_state()
+        self.assertEqual(saved["profile"], "Music")
+        self.assertEqual(saved["params"]["bass_amt"], 0.4)
+        self.assertNotIn("sysvol_db", saved["params"])
+        self.assertNotIn("layout", saved["params"])
+
+    def test_state_save_uses_base_sound_during_temporary_app_profile(self):
+        self.controller._auto_base = {"params": {"bass_amt": 0.2}}
+        self.params["bass_amt"] = 0.9
+        Backend._save(self.controller)
+        self.assertEqual(persistence.load_state()["params"], {"bass_amt": 0.2})
+        self.assertEqual(self.params["bass_amt"], 0.9)
+
+    def test_state_save_failure_logs_without_damaging_previous_state(self):
+        Backend._save(self.controller)
+        before = self.state_file.read_bytes()
+        self.params["bass_amt"] = 0.9
+        with patch.object(persistence.os, "replace", side_effect=PermissionError("denied")), \
+                patch("resona.backend.print") as log:
+            Backend._save(self.controller)
+        self.assertEqual(self.state_file.read_bytes(), before)
+        self.assertEqual(log.call_args.args[0], "resona: could not save state:")
+        self.assertEqual(list(self.root.rglob("*.tmp")), [])
+        self.controller._state["invalid"] = object()
+        with patch("resona.backend.print") as log:
+            Backend._save(self.controller)
+        log.assert_called_once()
+        self.assertEqual(self.state_file.read_bytes(), before)
+
+    def test_preset_save_and_load_preserve_sound_and_correction(self):
+        correction = {"filters": [{"type": "PK", "freq": 1000, "gain": 3, "q": 1}]}
+        self.controller._state["correction"] = correction
+        Backend.savePreset(self.controller, "Saved")
+        saved = persistence.read_json(persistence.preset_path("Saved"))
+        self.assertEqual(saved["resona_preset"], 1)
+        self.assertEqual(saved["correction"], correction)
+        self.controller.presetsChanged.emit.assert_called_once_with()
+        self.controller.toast.emit.assert_called_with("Saved “Saved”")
+        self.params["bass_amt"] = 0.1
+        Backend.loadPreset(self.controller, "Saved")
+        self.assertEqual(self.params["bass_amt"], 0.4)
+        self.controller._set_correction.assert_called_once_with(correction)
+        self.controller.toast.emit.assert_called_with("Loaded “Saved”")
+
+    def test_failed_preset_save_reports_error_without_success_signal(self):
+        destination = persistence.preset_path("Saved")
+        persistence.write_json(destination, {"params": {"bass_amt": 0.2}})
+        before = destination.read_bytes()
+        with patch.object(persistence.os, "fsync", side_effect=OSError("disk full")):
+            Backend.savePreset(self.controller, "Saved")
+        self.assertEqual(destination.read_bytes(), before)
+        self.controller.presetsChanged.emit.assert_not_called()
+        self.controller.toast.emit.assert_called_once_with("Preset: disk full")
+        self.assertEqual(list(self.root.rglob("*.tmp")), [])
+
+    def test_blank_preset_name_is_a_no_op(self):
+        Backend.savePreset(self.controller, "  ")
+        self.assertFalse(self.preset_dir.exists())
+        self.controller.presetsChanged.emit.assert_not_called()
+        self.controller.toast.emit.assert_not_called()
+
+    def test_failed_import_does_not_change_live_audio_or_existing_preset(self):
+        source = self.root / "Imported.json"
+        source.write_text(json.dumps({"params": {"bass_amt": 0.8}}))
+        destination = persistence.preset_path(source.stem)
+        persistence.write_json(destination, {"params": {"bass_amt": 0.2}})
+        before = destination.read_bytes()
+        previous_params = dict(self.params)
+        previous_state = dict(self.controller._state)
+        with patch.object(persistence.os, "replace", side_effect=PermissionError("denied")):
+            Backend.importPreset(self.controller, str(source))
+        self.assertEqual(self.params, previous_params)
+        self.assertEqual(self.controller._state, previous_state)
+        self.assertEqual(destination.read_bytes(), before)
+        self.controller._set_correction.assert_not_called()
+        self.controller.clearCorrection.assert_not_called()
+        self.controller.presetsChanged.emit.assert_not_called()
+        self.controller.toast.emit.assert_called_once_with("Import failed: denied")
+
+    def test_successful_import_preserves_raw_file_and_applies_validated_sound(self):
+        source = self.root / "Imported.json"
+        content = b'{ "params": {"bass_amt": 0.8}, "correction": {"filters": [{"type":"PK", "freq":1000, "gain":-30, "q":1}]} }\n'
+        source.write_bytes(content)
+        Backend.importPreset(self.controller, source.as_uri())
+        self.assertEqual(persistence.preset_path(source.stem).read_bytes(), content)
+        self.assertEqual(self.params["bass_amt"], 0.8)
+        self.assertEqual(self.controller._set_correction.call_args.args[0]["filters"][0]["gain"], -24)
+        self.controller.presetsChanged.emit.assert_called_once_with()
+        self.controller.toast.emit.assert_called_once_with("Loaded “Imported”")
+
+    def test_export_extension_listing_and_delete_keep_existing_ui_contract(self):
+        Backend.savePreset(self.controller, "Saved")
+        self.assertEqual(Backend.userPresets.fget(self.controller), ["Saved"])
+        Backend.exportPreset(self.controller, "Saved", str(self.root / "Export.txt"))
+        self.assertEqual((self.root / "Export.json").read_bytes(), persistence.preset_path("Saved").read_bytes())
+        self.assertFalse((self.root / "Export.txt").exists())
+        self.controller.toast.emit.assert_called_with("Exported to Export.json")
+        Backend.deletePreset(self.controller, "Saved")
+        self.assertEqual(Backend.userPresets.fget(self.controller), [])
 
 
 if __name__ == "__main__":
