@@ -303,6 +303,62 @@ class ShutdownTests(unittest.TestCase):
         worker.assert_not_called()
 
 
+class WatchdogTests(unittest.TestCase):
+    def controller(self, running=True, ready_since=100.0, restarts=5):
+        return SimpleNamespace(
+            _closing=False, _busy=False, _running=True, _ready_since=ready_since,
+            _restarts=restarts, pipe=SimpleNamespace(running=running), startEngine=Mock(),
+            toast=SimpleNamespace(emit=Mock()), stateChanged=SimpleNamespace(emit=Mock()),
+        )
+
+    def test_stable_engine_gets_a_fresh_retry_budget(self):
+        controller = self.controller()
+        with patch("resona.backend.time.monotonic", return_value=130.0):
+            Backend._check_engine(controller)
+        self.assertEqual(controller._restarts, 0)
+        controller.pipe.running = False
+        Backend._check_engine(controller)
+        controller.startEngine.assert_called_once_with()
+        self.assertEqual(controller._restarts, 1)
+
+    def test_short_healthy_run_keeps_the_retry_count(self):
+        controller = self.controller()
+        with patch("resona.backend.time.monotonic", return_value=129.9):
+            Backend._check_engine(controller)
+        self.assertEqual(controller._restarts, 5)
+        controller.startEngine.assert_not_called()
+
+    def test_dead_engine_does_not_reset_budget_from_elapsed_time(self):
+        controller = self.controller(running=False)
+        with patch("resona.backend.time.monotonic", return_value=1000.0):
+            Backend._check_engine(controller)
+        self.assertEqual(controller._restarts, 5)
+        controller.startEngine.assert_not_called()
+        self.assertEqual(controller._status, "Engine keeps crashing, see logs")
+
+    def test_repeated_crashes_still_stop_after_five_retries(self):
+        controller = self.controller(running=False, restarts=0)
+        with patch("resona.backend.time.monotonic", return_value=101.0):
+            for _ in range(6):
+                controller._running = True
+                Backend._check_engine(controller)
+        self.assertEqual(controller.startEngine.call_count, 5)
+        self.assertEqual(controller._restarts, 5)
+        self.assertFalse(controller._running)
+
+    def test_unready_engine_does_not_reset_budget(self):
+        controller = self.controller(ready_since=None)
+        Backend._check_engine(controller)
+        self.assertEqual(controller._restarts, 5)
+
+    def test_closed_or_busy_backend_does_not_restart(self):
+        for field in ("_closing", "_busy"):
+            controller = self.controller(running=False, restarts=0)
+            setattr(controller, field, True)
+            Backend._check_engine(controller)
+            controller.startEngine.assert_not_called()
+
+
 class StartupTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

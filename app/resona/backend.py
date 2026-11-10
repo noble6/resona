@@ -85,6 +85,7 @@ class Backend(QObject):
         self._last_hb_change = 0.0
         self._processing = False
         self._restarts = 0
+        self._ready_since: float | None = None
         self._ticks = 0
         self._curve = [0.0] * len(CURVE_FREQS)
         self._corr_curve = [0.0] * len(CURVE_FREQS)
@@ -219,6 +220,7 @@ class Backend(QObject):
         self._busy = False
         self._quiet_until = time.monotonic() + 1.5
         self._running = ok
+        self._ready_since = time.monotonic() if ok else None
         if ok:
             prev = self._state.get("last_target")
             if info and prev != info:
@@ -276,9 +278,13 @@ class Backend(QObject):
         return names[0] if names else None
 
     def _check_engine(self):
-        if self._busy:
+        if self._closing or self._busy:
             return
-        if self._running and not self.pipe.running:
+        if self._running and self.pipe.running:
+            # A stable run starts a new retry budget; rapid crash loops stay bounded.
+            if self._ready_since is not None and time.monotonic() - self._ready_since >= 30:
+                self._restarts = 0
+        elif self._running:
             self._running = False
             if self._restarts < 5:
                 self._restarts += 1
