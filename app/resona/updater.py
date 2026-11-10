@@ -2,16 +2,16 @@
 from __future__ import annotations
 
 import json
+import gzip
 import os
 import re
 import shlex
-import shutil
 import subprocess
 import tarfile
 import tempfile
 import urllib.error
 import urllib.request
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from . import __version__
 
@@ -20,6 +20,9 @@ API = f"https://api.github.com/repos/{REPO}/releases/latest"
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "resona" / "update"
 APP_DIR = Path(__file__).resolve().parent.parent          # .../share/resona or <repo>/app
 FREQ_DAYS = {"manual": 0, "weekly": 7, "monthly": 30}
+MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024
+MAX_EXTRACTED_BYTES = 256 * 1024 * 1024
+MAX_ARCHIVE_MEMBERS = 20000
 
 
 def version_tuple(v: str) -> tuple:
@@ -63,6 +66,59 @@ def check() -> dict:
     }
 
 
+def _copy_limited(source, destination, limit: int, message: str) -> int:
+    total = 0
+    while chunk := source.read(min(65536, limit - total + 1)):
+        total += len(chunk)
+        if total > limit:
+            raise RuntimeError(message)
+        destination.write(chunk)
+    return total
+
+
+def _download(url: str, destination: Path) -> None:
+    with _get(url, timeout=60) as response:
+        length = getattr(response, "headers", {}).get("Content-Length")
+        if length is not None:
+            try:
+                length = int(length)
+            except ValueError as e:
+                raise RuntimeError("Invalid update download length") from e
+            if length < 0 or length > MAX_DOWNLOAD_BYTES:
+                raise RuntimeError("Update download exceeds the size limit")
+        with destination.open("wb") as output:
+            total = _copy_limited(response, output, MAX_DOWNLOAD_BYTES,
+                                  "Update download exceeds the size limit")
+        if length is not None and total != length:
+            raise RuntimeError("Update download is incomplete")
+
+
+def _extract(archive: Path, destination: Path) -> None:
+    # Bound decompression before tarfile parses even large PAX metadata records.
+    with tempfile.TemporaryFile(dir=archive.parent) as unpacked:
+        with gzip.open(archive, "rb") as compressed:
+            _copy_limited(compressed, unpacked, MAX_EXTRACTED_BYTES,
+                          "Release archive exceeds the extraction limit")
+        unpacked.seek(0)
+        with tarfile.open(fileobj=unpacked, mode="r:") as source:
+            members, total = [], 0
+            for member in source:
+                path = PurePosixPath(member.name)
+                if not path.parts or path.is_absolute() or ".." in path.parts:
+                    raise RuntimeError("Unsafe path in release archive")
+                if not (member.isfile() or member.isdir()):
+                    raise RuntimeError("Release archive contains links or special files")
+                if member.size < 0:
+                    raise RuntimeError("Invalid file size in release archive")
+                total += member.size
+                if total > MAX_EXTRACTED_BYTES or len(members) >= MAX_ARCHIVE_MEMBERS:
+                    raise RuntimeError("Release archive exceeds the extraction limit")
+                members.append(member)
+            if not members:
+                raise RuntimeError("Release archive is empty")
+            source.extractall(destination, members=members, filter="data")
+
+
 def install(info: dict) -> str:
     """Download the release source, build it and install over the running copy. Returns the launcher path."""
     kind = install_kind()
@@ -76,11 +132,9 @@ def install(info: dict) -> str:
     with tempfile.TemporaryDirectory(prefix="release-", dir=CACHE) as directory:
         workspace = Path(directory)
         archive = workspace / "release.tar.gz"
-        with _get(url, timeout=60) as r, open(archive, "wb") as f:
-            shutil.copyfileobj(r, f)
+        _download(url, archive)
         src = workspace / "src"
-        with tarfile.open(archive) as t:
-            t.extractall(src, filter="data")
+        _extract(archive, src)
         roots = [p for p in src.iterdir() if p.is_dir()]
         if len(roots) != 1 or not (roots[0] / "install.sh").is_file():
             raise RuntimeError("Release archive has an unexpected layout")
