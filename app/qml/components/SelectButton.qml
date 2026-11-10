@@ -12,8 +12,12 @@ Rectangle {
     Accessible.role: Accessible.ComboBox
     Accessible.name: placeholder
     Accessible.description: current
-    Accessible.expandable: true
-    Accessible.expanded: menu.opened
+    // Expansion state is not exposed by older supported Qt accessibility APIs.
+    function updateAccessibleExpansion() {
+        if ("expandable" in root.Accessible) root.Accessible.expandable = true
+        if ("expanded" in root.Accessible) root.Accessible.expanded = menu.opened
+    }
+    Component.onCompleted: updateAccessibleExpansion()
     Accessible.onPressAction: menu.open()
     Keys.onShortcutOverride: (event) => { if (event.key === Qt.Key_Space) event.accepted = true }
     Keys.onPressed: (event) => {
@@ -40,6 +44,7 @@ Rectangle {
         width: Math.max(200, root.width)
         height: Math.min(implicitHeight, 320)
         focus: true
+        onOpenedChanged: root.updateAccessibleExpansion()
         onAboutToShow: currentIndex = Math.max(0, root.options.indexOf(root.current))
         background: Rectangle { color: Theme.surfaceContainerHigh; radius: 16; border.width: 1; border.color: Theme.outlineVariant }
         Instantiator {
