@@ -72,6 +72,7 @@ jobs:
           python tests/test_backend.py
           python tests/test_pipeline.py
           python tests/test_correction.py
+          python tests/test_correction_model.py
           python tests/test_shm.py
           python tests/test_validation.py
           python tests/test_desktop.py
