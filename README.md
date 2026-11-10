@@ -175,7 +175,9 @@ Some of what these suites verify: bit-transparent output with effects neutral; E
 PRs are welcome, especially new profiles, translations, distro packages and DSP ideas. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Run the test suites before sending DSP changes.
 
 ## Credits
+
 - **[Madaboutpawz](https://github.com/Madaboutpawz)** for everything
+- **[rajdeep-3305](https://github.com/rajdeep-3305)**: contributor, tech support and fixes across the app
 - **[AutoEq](https://github.com/jaakkopasanen/AutoEq)** by Jaakko Pasanen (MIT): the headphone measurements and correction filters, fetched on demand
 - **[JamesDSP](https://github.com/Audio4Linux/JDSP4Linux)** (GPL-3.0): reference for the ViPER-DDC file format and the IRS ecosystem
 - **C. P. Brown & R. O. Duda**, *A Structural Model for Binaural Sound Synthesis* (IEEE TSAP, 1998): the HRTF model
