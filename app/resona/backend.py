@@ -198,16 +198,20 @@ class Backend(QObject):
         self._quiet_until = time.monotonic() + 3
         self._status = "Starting engine…"
         self.stateChanged.emit()
-        try:
-            self.pipe.spawn(target, layout=layout, ir=ir)  # main thread on purpose, see Pipeline.spawn
-        except Exception as e:  # noqa: BLE001
-            self._startDone.emit(False, str(e))
-            return
 
         def work():
-            ok = self.pipe.wait_ready(make_default=not os.environ.get("RESONA_TEST_TARGET"))
-            self._startDone.emit(ok, target or "")
-        threading.Thread(target=work, daemon=True).start()
+            try:
+                ok = self.pipe.wait_ready(make_default=not os.environ.get("RESONA_TEST_TARGET"))
+            except Exception as e:  # noqa: BLE001
+                self._startDone.emit(False, str(e))
+            else:
+                self._startDone.emit(ok, (target or "") if ok else "")
+
+        try:
+            self.pipe.spawn(target, layout=layout, ir=ir)  # main thread on purpose, see Pipeline.spawn
+            threading.Thread(target=work, daemon=True).start()
+        except Exception as e:  # noqa: BLE001
+            self._startDone.emit(False, str(e))
 
     def _on_started(self, ok: bool, info: str):
         if self._closing:
@@ -229,7 +233,9 @@ class Backend(QObject):
             self._app_timer.start()
         else:
             log = self.pipe.last_log().strip().splitlines()
-            self._status = "Engine failed to start" + (f": {log[-1]}" if log else (f": {info}" if info else ""))
+            self.pipe.stop(restore_default=True)
+            reason = info or (log[-1] if log else "")
+            self._status = "Engine failed to start" + (f": {reason}" if reason else "")
             self.toast.emit(self._status)
         self.stateChanged.emit()
 
@@ -955,7 +961,8 @@ class Backend(QObject):
 
     @Slot(str)
     def setOutput(self, name: str):
-        if name and (name != self.pipe.target or self._state.get("output") != name):
+        if name and (name != self.pipe.target or self._state.get("output") != name
+                     or (not self._running and not self._busy)):
             self._output_request += 1
             self._state["output"] = name
             self.startEngine()

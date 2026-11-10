@@ -303,6 +303,71 @@ class ShutdownTests(unittest.TestCase):
         worker.assert_not_called()
 
 
+class StartupTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QCoreApplication.instance() or QCoreApplication([])
+
+    def setUp(self):
+        ShutdownTests.setUp(self)
+        self.backend._anim.stop()
+        self.stack.enter_context(patch.object(self.backend, "_pick_target", return_value="physical"))
+        self.backend._device_switched = Mock()
+        self.backend._state["output"] = "physical"
+        self.pipe.target = "physical"
+
+    pump = ShutdownTests.pump
+
+    def settle(self):
+        for _ in range(100):
+            self.pump(10)
+            if self.pipe.spawn.called and not self.backend.busy:
+                break
+        self.assertFalse(self.backend.busy, "startup did not leave the busy state")
+
+    def test_readiness_failure_stops_child_and_keeps_output_choice(self):
+        self.settle()
+        self.assertFalse(self.backend.running)
+        self.pipe.stop.assert_called_once_with(restore_default=True)
+        self.assertEqual(self.backend._state["output"], "physical")
+        self.assertNotIn("last_target", self.backend._state)
+        self.assertEqual(self.backend.status, "Engine failed to start: stopped")
+
+    def test_readiness_exception_reports_failure(self):
+        self.pipe.wait_ready.side_effect = OSError("readiness failed")
+        with patch("threading.excepthook") as unhandled:
+            self.settle()
+        unhandled.assert_not_called()
+        self.assertFalse(self.backend.running)
+        self.pipe.stop.assert_called_once_with(restore_default=True)
+        self.assertEqual(self.backend.status, "Engine failed to start: readiness failed")
+
+    def test_worker_launch_failure_stops_spawned_child(self):
+        with patch("resona.backend.threading.Thread") as worker:
+            worker.return_value.start.side_effect = RuntimeError("worker launch failed")
+            self.settle()
+        self.assertFalse(self.backend.running)
+        self.pipe.stop.assert_called_once_with(restore_default=True)
+        self.assertEqual(self.backend.status, "Engine failed to start: worker launch failed")
+
+    def test_spawn_error_is_not_hidden_by_an_old_log(self):
+        self.pipe.spawn.side_effect = OSError("launch failed")
+        with patch("resona.backend.threading.Thread") as worker:
+            self.settle()
+        worker.assert_not_called()
+        self.assertEqual(self.backend.status, "Engine failed to start: launch failed")
+
+    def test_failed_output_can_be_selected_again_to_retry(self):
+        self.settle()
+        self.pipe.wait_ready.return_value = True
+        self.backend.setOutput("physical")
+        self.settle()
+        self.assertEqual(self.pipe.spawn.call_count, 2)
+        self.assertTrue(self.backend.running)
+        self.assertEqual(self.backend._status, "Ready")
+        self.assertEqual(self.backend._state["output"], "physical")
+
+
 class OutputRequestTests(unittest.TestCase):
     def test_busy_start_keeps_the_inflight_generation(self):
         controller = SimpleNamespace(_closing=False, _busy=True, _output_request=2, _start_output_request=1,
@@ -349,6 +414,15 @@ class OutputRequestTests(unittest.TestCase):
 
     def test_reselecting_unchanged_output_does_not_restart(self):
         controller = SimpleNamespace(_state={"output": "same"}, _output_request=1,
+                                     _running=True, _busy=False,
+                                     pipe=SimpleNamespace(target="same"), startEngine=Mock())
+        Backend.setOutput(controller, "same")
+        controller.startEngine.assert_not_called()
+        self.assertEqual(controller._output_request, 1)
+
+    def test_reselecting_inflight_output_does_not_queue_another_start(self):
+        controller = SimpleNamespace(_state={"output": "same"}, _output_request=1,
+                                     _running=False, _busy=True,
                                      pipe=SimpleNamespace(target="same"), startEngine=Mock())
         Backend.setOutput(controller, "same")
         controller.startEngine.assert_not_called()

@@ -188,8 +188,9 @@ python3 tests/test_capture_live.py   # games that bypass the default device get 
 bash tests/run_pipewire.sh          # all live suites and UI smoke test on a private audio server
 ```
 
-The private-server harness also stress-tests repeated and rapid output choices,
-virtual-device removal/reappearance, recovery after killing its own child engine,
+The private-server harness also checks failed startup cleanup and same-output
+retry, repeated and rapid output choices, virtual-device removal/reappearance,
+recovery after killing its own child engine,
 44.1/48/96 kHz graph rates, finite samples/meters, and an 8-second processing soak.
 It does not use desktop audio. For a longer isolated soak, run:
 

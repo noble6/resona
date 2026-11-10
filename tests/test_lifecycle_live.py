@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import wave
+from unittest.mock import patch
 
 import numpy as np
 from PySide6.QtCore import QEventLoop, QTimer
@@ -105,6 +106,23 @@ def main():
         try:
             ready(original)
             check_audio()
+            wait_ready = backend.pipe.wait_ready
+            with patch.object(backend.pipe, "wait_ready",
+                              side_effect=lambda **kwargs: wait_ready(timeout=0, **kwargs)):
+                backend.startEngine()
+                failed = backend.pipe.proc
+                processes.append(failed)
+                wait_for(lambda: not backend.busy and not backend.running,
+                         "failed startup did not settle")
+            assert failed.poll() is not None, "failed startup left its child engine alive"
+            wait_for(lambda: not pipeline.sink_exists(pipeline.SINK_NAME),
+                     "failed startup leaked its virtual sink")
+            wait_for(lambda: pipeline.default_sink() in outputs,
+                     "failed startup did not leave a usable default output")
+            backend.setOutput(original)
+            ready(original)
+            check_audio()
+            print("  ok   failed startup cleans up and the same output can retry", flush=True)
             other = "ci_other" if original == "ci_hardware" else "ci_hardware"
             for cycle in range(3):
                 for target in (other, original):
