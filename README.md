@@ -121,11 +121,20 @@ recovery fails, the error reports retained backup workspaces for manual recovery
 Replacement is sequential, not an atomic switch of the entire installation.
 Power loss and `SIGKILL` are not covered by rollback.
 
-Self-updates accept stable `x.y.z` release tags from this repository and check that
-the downloaded source declares the requested version before running its installer.
-Downloads are limited to 64 MiB, decompressed archives to 256 MiB and 20,000 entries.
-Archives may contain only regular files and directories. These checks verify release
-consistency; they are not cryptographic signature verification.
+Self-updates require a current [GitHub CLI](https://cli.github.com/) with
+`gh attestation verify` and `--source-digest` support. Resona accepts only stable
+`x.y.z` releases with an attested source archive and Sigstore bundle produced by
+this repository's `.github/workflows/release.yml`. Verification checks the artifact
+signature, repository, exact workflow identity, release tag, pinned source commit,
+and GitHub-hosted runner before extraction or installation. The source must also
+declare the requested version. There is no fallback to unsigned source archives;
+older releases without these assets require a manual update.
+
+Source downloads are limited to 64 MiB, attestation bundles to 4 MiB, decompressed
+archives to 256 MiB and 20,000 entries. Archives may contain only regular files and
+directories. Publishing a new stable GitHub release triggers source packaging and
+keyless attestation signing; no maintainer private signing key is stored. Existing
+releases are not automatically republished or signed retroactively.
 
 ## How it works
 
