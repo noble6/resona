@@ -78,7 +78,7 @@ def verify(archive, bundle, info):
     if not executable:
         raise RuntimeError("Install a current GitHub CLI (gh) to verify update attestations")
     command = [executable, "attestation", "verify", str(archive), "--bundle", str(bundle),
-               "--hostname", "github.com", "--repo", REPO, "--signer-workflow", WORKFLOW,
+               "--hostname", "github.com", "--repo", REPO,
                "--cert-identity", f"https://github.com/{WORKFLOW}@refs/tags/{info['tag']}",
                "--cert-oidc-issuer", "https://token.actions.githubusercontent.com",
                "--source-ref", f"refs/tags/{info['tag']}", "--source-digest", info["commit"],

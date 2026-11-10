@@ -54,7 +54,7 @@ jobs:
         run: |
           cp "$BUNDLE" "$ASSET.sigstore.json"
           gh attestation verify "$ASSET" --bundle "$ASSET.sigstore.json" --hostname github.com \
-            --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --repo "$GITHUB_REPOSITORY" \
             --cert-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/tags/$TAG" \
             --cert-oidc-issuer https://token.actions.githubusercontent.com \
             --source-ref "refs/tags/$TAG" --source-digest "$GITHUB_SHA" --deny-self-hosted-runners
