@@ -90,5 +90,82 @@ state.write({"eq0": 6})
                 state.close()
 
 
+class ReaderLifetimeTests(unittest.TestCase):
+    def test_close_waits_for_every_inflight_reader(self):
+        code = r'''
+import resource, sys, threading
+from resona import shm
+resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+state = shm.SharedState(sys.argv[1])
+kind = sys.argv[2]
+entered, resume, closing, closed = (threading.Event() for _ in range(4))
+errors, results = [], []
+def pause():
+    entered.set()
+    assert resume.wait(5), "reader was not resumed"
+if kind in ("heartbeat", "sample_rate", "out_channels", "meters"):
+    unpack = shm.struct.unpack_from
+    def paused_unpack(*args, **kwargs):
+        pause()
+        return unpack(*args, **kwargs)
+    shm.struct.unpack_from = paused_unpack
+elif kind == "ieq_gains":
+    original = state.ieq
+    class PausedArray:
+        def __iter__(self):
+            pause()
+            return iter(original)
+    state.ieq = PausedArray()
+else:
+    arange = shm.np.arange
+    def paused_arange(*args, **kwargs):
+        pause()
+        return arange(*args, **kwargs)
+    shm.np.arange = paused_arange
+def read():
+    try:
+        value = getattr(state, kind)
+        results.append(value(8) if kind == "latest" else value() if callable(value) else value)
+    except BaseException as error:
+        errors.append(error)
+def close():
+    closing.set()
+    state.close()
+    closed.set()
+reader = threading.Thread(target=read, daemon=True)
+closer = threading.Thread(target=close, daemon=True)
+reader.start()
+assert entered.wait(5), "reader never reached mapped data"
+closer.start()
+try:
+    assert closing.wait(5), "close never started"
+    assert not closed.wait(0.1), "mapping closed during read"
+finally:
+    resume.set()
+    reader.join(5)
+    closer.join(5)
+assert not reader.is_alive() and not closer.is_alive(), "lifecycle deadlock"
+assert not errors, errors
+assert len(results) == 1
+assert state.closed and closed.is_set()
+assert state.heartbeat == 0 and state.sample_rate == 48000 and state.out_channels == 2
+assert state.ieq_gains() == [0.0] * shm.NBANDS
+assert not any(state.meters().values())
+a, b = state.latest(8)
+assert len(a) == len(b) == 8 and not a.any() and not b.any()
+if kind == "latest":
+    assert all(array.flags.owndata for array in results[0])
+state.close()
+'''
+        for reader in ("heartbeat", "sample_rate", "out_channels", "meters", "ieq_gains", "latest"):
+            with self.subTest(reader=reader), tempfile.TemporaryDirectory() as directory:
+                result = subprocess.run(
+                    [sys.executable, "-c", code, str(Path(directory) / "shm"), reader],
+                    env=dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "app")),
+                    capture_output=True, text=True, timeout=15,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

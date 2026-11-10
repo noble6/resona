@@ -78,7 +78,7 @@ class SharedState:
     def __init__(self, path: str | None = None):
         self.path = path or default_path()
         self.closed = False
-        self._write_lock = threading.Lock()
+        self._write_lock = threading.RLock()
         fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
         try:
             if os.fstat(fd).st_size < SIZE:
@@ -101,9 +101,10 @@ class SharedState:
             struct.pack_into("<I", self.mm, OFF_MAGIC, MAGIC)
 
     def _u32(self, off: int) -> int:
-        if self.closed:
-            return 0
-        return struct.unpack_from("<I", self.mm, off)[0]
+        with self._write_lock:
+            if self.closed:
+                return 0
+            return struct.unpack_from("<I", self.mm, off)[0]
 
     def _bump(self) -> None:
         _store_u32(self._address + OFF_SEQ, (self._u32(OFF_SEQ) + 1) & 0xFFFFFFFF, 0)
@@ -162,24 +163,27 @@ class SharedState:
         return self._u32(OFF_OUT_CH) or 2
 
     def meters(self) -> dict[str, float]:
-        if self.closed:
-            return dict(in_l=0, in_r=0, out_l=0, out_r=0, leveler_db=0, limiter_db=0, loudness_db=0, content_db=0)
-        il, ir, ol, orr = struct.unpack_from("<4f", self.mm, OFF_IN_PEAK)
-        lev, lim, loud, content = struct.unpack_from("<4f", self.mm, OFF_LEVELER)
+        with self._write_lock:
+            if self.closed:
+                return dict(in_l=0, in_r=0, out_l=0, out_r=0, leveler_db=0, limiter_db=0, loudness_db=0, content_db=0)
+            il, ir, ol, orr = struct.unpack_from("<4f", self.mm, OFF_IN_PEAK)
+            lev, lim, loud, content = struct.unpack_from("<4f", self.mm, OFF_LEVELER)
         return dict(in_l=il, in_r=ir, out_l=ol, out_r=orr, leveler_db=lev,
                     limiter_db=lim, loudness_db=loud, content_db=content)
 
     def ieq_gains(self) -> list[float]:
-        if self.closed:
-            return [0.0] * NBANDS
-        return [round(float(x), 2) for x in self.ieq]
+        with self._write_lock:
+            if self.closed:
+                return [0.0] * NBANDS
+            return [round(float(x), 2) for x in self.ieq]
 
     def latest(self, n: int = 2048) -> tuple[np.ndarray, np.ndarray]:
-        if self.closed:
-            return np.zeros(n, np.float32), np.zeros(n, np.float32)
-        pos = self._u32(OFF_RING_POS)
-        idx = np.arange(pos - n, pos) % RING
-        return self.ring_in[idx].copy(), self.ring_out[idx].copy()
+        with self._write_lock:
+            if self.closed:
+                return np.zeros(n, np.float32), np.zeros(n, np.float32)
+            pos = self._u32(OFF_RING_POS)
+            idx = np.arange(pos - n, pos) % RING
+            return self.ring_in[idx].copy(), self.ring_out[idx].copy()
 
     def close(self) -> None:
         # numpy views do not pin the mapping: drop them and refuse access before unmapping,
