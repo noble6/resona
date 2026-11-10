@@ -1,5 +1,6 @@
 """Offline update tests; no network request or real installation is performed."""
 import io
+import json
 import subprocess
 import sys
 import tarfile
@@ -116,6 +117,54 @@ class UpdateTests(unittest.TestCase):
             with self.subTest(length=length), tempfile.TemporaryDirectory() as directory:
                 with patch.object(updater, "_get", return_value=response), self.assertRaises(RuntimeError):
                     updater._download(self.info()["tarball"], Path(directory) / "download")
+
+    def test_release_metadata_is_validated_before_download(self):
+        for changes in (
+            {"tag": "main"}, {"version": "8.0.0"},
+            {"tarball": "https://example.com/release.tar.gz"},
+            {"tarball": f"https://api.github.com/repos/{updater.REPO}/tarball/main"},
+            {"tarball": self.info()["tarball"] + "?other=1"},
+        ):
+            with self.subTest(changes=changes), \
+                    patch.object(updater, "install_kind", return_value="user"), \
+                    patch.object(updater, "_get") as download, \
+                    patch.object(updater.subprocess, "run") as install:
+                with self.assertRaises(RuntimeError):
+                    updater.install(self.info() | changes)
+                download.assert_not_called()
+                install.assert_not_called()
+
+    def test_source_version_mismatch_never_runs_installer(self):
+        info = self.info() | {"tag": "v8.0.0", "version": "8.0.0",
+                              "tarball": f"https://api.github.com/repos/{updater.REPO}/tarball/v8.0.0"}
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with patch.object(updater, "CACHE", cache), \
+                    patch.object(updater, "install_kind", return_value="user"), \
+                    patch.object(updater, "_get", return_value=io.BytesIO(self.archive())), \
+                    patch.object(updater.subprocess, "run") as install:
+                with self.assertRaisesRegex(RuntimeError, "source version"):
+                    updater.install(info)
+                install.assert_not_called()
+            self.assertEqual(list(cache.iterdir()), [])
+
+    def test_check_validates_github_metadata(self):
+        release = {"tag_name": "v9.0.0", "tarball_url": self.info()["tarball"]}
+        with patch.object(updater, "_get", return_value=io.BytesIO(json.dumps(release).encode())):
+            info = updater.check()
+        self.assertTrue(info["available"])
+        self.assertEqual(info["version"], "9.0.0")
+        release["tarball_url"] = "https://example.com/not-this-project"
+        with patch.object(updater, "_get", return_value=io.BytesIO(json.dumps(release).encode())):
+            with self.assertRaisesRegex(RuntimeError, "download location"):
+                updater.check()
+
+    def test_unpublished_or_invalid_release_responses_are_rejected(self):
+        for response in ([], None, {"draft": True}, {"prerelease": True}):
+            with self.subTest(response=response), \
+                    patch.object(updater, "_get", return_value=io.BytesIO(json.dumps(response).encode())):
+                with self.assertRaisesRegex(RuntimeError, "stable published release"):
+                    updater.check()
 
 
 if __name__ == "__main__":

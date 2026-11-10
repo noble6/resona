@@ -45,6 +45,18 @@ def _get(url: str, timeout: float = 15):
     return urllib.request.urlopen(req, timeout=timeout)
 
 
+def _release_download(info: dict) -> str:
+    tag = info.get("tag", "")
+    if not isinstance(tag, str) or not re.fullmatch(r"[vV]?\d+\.\d+\.\d+", tag):
+        raise RuntimeError("Unexpected release tag")
+    if info.get("version") != tag.lstrip("vV"):
+        raise RuntimeError("Release tag and version do not match")
+    expected = f"https://api.github.com/repos/{REPO}/tarball/{tag}"
+    if info.get("tarball") != expected:
+        raise RuntimeError("Unexpected download location")
+    return expected
+
+
 def check() -> dict:
     """Latest release info. Raises on network errors."""
     try:
@@ -54,9 +66,13 @@ def check() -> dict:
         if e.code == 404:
             return {"available": False, "version": __version__, "notes": "", "tag": ""}
         raise
+    if not isinstance(rel, dict) or rel.get("draft") or rel.get("prerelease"):
+        raise RuntimeError("Expected a stable published release")
     tag = rel.get("tag_name", "")
+    if not isinstance(tag, str):
+        raise RuntimeError("Unexpected release tag")
     latest = tag.lstrip("vV")
-    return {
+    info = {
         "available": version_tuple(latest) > version_tuple(__version__),
         "version": latest, "tag": tag,
         "title": rel.get("name") or tag,
@@ -64,6 +80,8 @@ def check() -> dict:
         "url": rel.get("html_url", f"https://github.com/{REPO}/releases"),
         "tarball": rel.get("tarball_url", ""),
     }
+    _release_download(info)
+    return info
 
 
 def _copy_limited(source, destination, limit: int, message: str) -> int:
@@ -125,9 +143,7 @@ def install(info: dict) -> str:
     if kind != "user":
         raise RuntimeError("Running from a git checkout: update with git pull" if kind == "source"
                            else "Installed by your package manager: update Resona with it")
-    url = info.get("tarball", "")
-    if not url.startswith(f"https://api.github.com/repos/{REPO}/"):
-        raise RuntimeError("Unexpected download location")
+    url = _release_download(info)
     CACHE.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="release-", dir=CACHE) as directory:
         workspace = Path(directory)
@@ -135,9 +151,16 @@ def install(info: dict) -> str:
         _download(url, archive)
         src = workspace / "src"
         _extract(archive, src)
-        roots = [p for p in src.iterdir() if p.is_dir()]
-        if len(roots) != 1 or not (roots[0] / "install.sh").is_file():
+        roots = list(src.iterdir())
+        if len(roots) != 1 or not roots[0].is_dir() or not (roots[0] / "install.sh").is_file():
             raise RuntimeError("Release archive has an unexpected layout")
+        version_file = roots[0] / "app/resona/__init__.py"
+        if not version_file.is_file():
+            raise RuntimeError("Release archive is missing its version")
+        with version_file.open() as stream:
+            versions = re.findall(r'''(?m)^__version__\s*=\s*["']([^"']+)["']\s*$''', stream.read(4096))
+        if versions != [info["version"]]:
+            raise RuntimeError("Release source version does not match the requested update")
         prefix = APP_DIR.parent.parent
         env = dict(os.environ, PREFIX=str(prefix))
         r = subprocess.run(["sh", str(roots[0] / "install.sh")], cwd=roots[0], env=env,

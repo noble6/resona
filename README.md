@@ -114,6 +114,12 @@ Arch users can also build `packaging/aur/PKGBUILD`.
 
 Closing the window keeps Resona running when a system tray is available. Without a tray, closing exits. *Quit* from the tray restores your original output. `./uninstall.sh` removes the app and autostart entry, but keeps presets, settings, caches, and PipeWire configuration.
 
+Self-updates accept stable `x.y.z` release tags from this repository and check that
+the downloaded source declares the requested version before running its installer.
+Downloads are limited to 64 MiB, decompressed archives to 256 MiB and 20,000 entries.
+Archives may contain only regular files and directories. These checks verify release
+consistency; they are not cryptographic signature verification.
+
 ## How it works
 
 ```
