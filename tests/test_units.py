@@ -131,6 +131,23 @@ if "--net" in sys.argv:
     v = correction.parse_vdc(real, 48000)
     ok = all(abs(b["a2"]) < 1 for b in v)
     check(len(v) > 3 and ok, f"real JamesDSP DDC file: {len(v)} stable biquads")
+    import hashlib as _h, json as _j, urllib.request as _u
+    from resona import release as _rel, sigstore_verify as _sv
+    _latest = _rel.read_json(updater._get, updater.API)
+    _tag = _latest["tag_name"]
+    _files = _rel.update_files(updater._get, _latest, _tag)
+    with updater._get(_files["tarball"], timeout=60) as _r:
+        _digest = _h.sha256(_r.read()).hexdigest()
+    with updater._get(_files["attestation"]) as _r:
+        _bundle = _j.loads(_r.read())
+    _sv.verify_bundle(_bundle, _digest, repo=_rel.REPO, workflow=_rel.WORKFLOW, tag=_tag,
+                      commit=_files["commit"], subject_name=f"resona-{_tag}.tar.gz")
+    check(True, f"latest release {_tag} verified offline with the built-in Sigstore verifier")
+    with updater._get("https://raw.githubusercontent.com/sigstore/root-signing/main/targets/trusted_root.json") as _r:
+        _up = _j.loads(_r.read())
+    _ours = _j.loads((ROOT / "app/resona/data/sigstore_trusted_root.json").read_text())
+    _keys = lambda t: {l["logId"]["keyId"] for k in ("tlogs", "ctlogs") for l in t[k]}  # noqa: E731
+    check(_keys(_up) <= _keys(_ours), "vendored Sigstore trusted root is current")
     rel = updater.check()
     check(rel["tag"].startswith("v") and rel["tarball"].startswith("https://api.github.com/repos/noble6/resona/"),
           f"latest GitHub release found: {rel['tag']} (running {__version__})")

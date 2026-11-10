@@ -102,12 +102,12 @@ git clone https://github.com/noble6/resona && cd resona
 resona                # or open "Resona" from your app menu
 ```
 
-Requirements: PipeWire with `pipewire-pulse` and WirePlumber (the default on every modern distro), Python ≥ 3.10, PySide6 (Qt ≥ 6.7), numpy, libatomic, a C compiler.
+Requirements: PipeWire with `pipewire-pulse` and WirePlumber (the default on every modern distro), Python ≥ 3.10, PySide6 (Qt ≥ 6.7), numpy, libatomic, a C compiler. Self-updates also use python-cryptography.
 
 ```sh
-sudo pacman -S pyside6 python-numpy gcc make                       # Arch / CachyOS / Manjaro
-sudo dnf install python3-pyside6 python3-numpy libatomic gcc make  # Fedora
-sudo apt install python3-pyside6.qtquick python3-pyside6.qtwidgets python3-numpy libatomic1 gcc make # Debian 13 / Ubuntu 24.10+
+sudo pacman -S pyside6 python-numpy python-cryptography gcc make   # Arch / CachyOS / Manjaro
+sudo dnf install python3-pyside6 python3-numpy python3-cryptography libatomic gcc make  # Fedora
+sudo apt install python3-pyside6.qtquick python3-pyside6.qtwidgets python3-numpy python3-cryptography libatomic1 gcc make # Debian 13 / Ubuntu 24.10+
 ```
 
 Arch users can also build `packaging/aur/PKGBUILD`.
@@ -128,14 +128,27 @@ and storage honoring flushes; no process can recover an installation while the
 machine is powered off. Interrupted staging can leave unused private temporary
 files if the process dies before recording their paths.
 
-Self-updates require a current [GitHub CLI](https://cli.github.com/) with
-`gh attestation verify` and `--source-digest` support. Resona accepts only stable
-`x.y.z` releases with an attested source archive and Sigstore bundle produced by
-this repository's `.github/workflows/release.yml`. Verification checks the artifact
-signature, repository, exact workflow identity, release tag, pinned source commit,
-and GitHub-hosted runner before extraction or installation. The source must also
-declare the requested version. There is no fallback to unsigned source archives;
-older releases without these assets require a manual update.
+Self-updates verify every release offline before installing it, with Resona's own
+Sigstore verifier (`app/resona/sigstore_verify.py`) and the
+[`cryptography`](https://cryptography.io) library most distros already ship. No GitHub
+CLI is needed. Resona accepts only stable `x.y.z` releases with an attested source
+archive and Sigstore bundle produced by this repository's `.github/workflows/release.yml`.
+Before extraction or installation it checks:
+
+- the signing certificate chains to Sigstore's Fulcio CA and has a valid embedded
+  certificate-transparency timestamp
+- the certificate identity: this repository, the exact release workflow, the release tag,
+  the pinned source commit and a GitHub-hosted runner
+- the signature over an SLSA provenance statement whose only subject is the downloaded archive
+- the Rekor transparency-log entry: signed entry timestamp, Merkle inclusion proof and
+  signed checkpoint
+
+The trust anchors are a vendored copy of Sigstore's public trusted root. If a future
+bundle format is not understood, Resona falls back to `gh attestation verify` when the
+GitHub CLI is installed and otherwise refuses the update. A failed check is never
+retried another way. The source must also declare the requested version. There is no
+fallback to unsigned source archives; older releases without these assets require a
+manual update.
 
 Source downloads are limited to 64 MiB, attestation bundles to 4 MiB, decompressed
 archives to 256 MiB and 20,000 entries. Archives may contain only regular files and

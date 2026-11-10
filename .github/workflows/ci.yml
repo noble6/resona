@@ -41,9 +41,9 @@ jobs:
         env: { QT_VERSION: "${{ matrix.qt }}" }
         run: |
           if [[ "$QT_VERSION" == latest ]]; then
-            pip install numpy PySide6
+            pip install numpy PySide6 cryptography
           else
-            pip install numpy "PySide6==$QT_VERSION"
+            pip install numpy cryptography "PySide6==$QT_VERSION"
           fi
       - name: Verify Qt runtime and architecture
         env: { QT_VERSION: "${{ matrix.qt }}" }
@@ -68,6 +68,7 @@ jobs:
           python tests/test_persistence.py
           python tests/test_updater.py
           python tests/test_release.py
+          python tests/test_sigstore.py
           python tests/test_install.py
           python tests/test_backend.py
           python tests/test_pipeline.py
@@ -141,7 +142,7 @@ jobs:
           apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
           sudo apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update
           sudo apt-get "${apt_options[@]}" install -y --no-install-recommends pipewire pipewire-pulse wireplumber pulseaudio-utils libegl1 libopengl0
-      - run: pip install numpy PySide6
+      - run: pip install numpy PySide6 cryptography
       - run: make -C engine
       - name: Live tests on isolated PipeWire server
         run: python tests/test_pipewire_environment.py
