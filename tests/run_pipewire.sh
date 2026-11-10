@@ -58,8 +58,9 @@ for (( i=0; i<100; i++ )); do
     sleep 0.1
 done
 pactl info >/dev/null
-pactl load-module module-null-sink sink_name=ci_hardware >/dev/null
-pactl load-module module-null-sink sink_name=ci_other >/dev/null
+source tests/pipewire_fixture.sh
+wait_for_test_sink ci_hardware
+wait_for_test_sink ci_other
 pactl set-default-sink ci_hardware
 
 python3 tests/test_pipewire.py
