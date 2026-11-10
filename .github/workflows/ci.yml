@@ -109,7 +109,7 @@ jobs:
           PYTHONPATH: app
         run: |
           gh attestation verify source.tar.gz --bundle "$BUNDLE" --hostname github.com \
-            --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/ci.yml" \
+            --repo "$GITHUB_REPOSITORY" \
             --cert-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/ci.yml@refs/heads/main" \
             --source-ref refs/heads/main --source-digest "$GITHUB_SHA" --deny-self-hosted-runners
           python3 - <<'PY'

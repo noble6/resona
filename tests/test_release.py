@@ -61,7 +61,7 @@ class ReleaseTests(unittest.TestCase):
                 patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as verify:
             release.verify(Path("archive"), Path("bundle"), self.info())
         command = verify.call_args.args[0]
-        for flag, value in (("--repo", release.REPO), ("--signer-workflow", release.WORKFLOW),
+        for flag, value in (("--repo", release.REPO),
                             ("--source-digest", "a" * 40), ("--source-ref", "refs/tags/v9.0.0"),
                             ("--bundle", "bundle"), ("--hostname", "github.com"),
                             ("--cert-identity", f"https://github.com/{release.WORKFLOW}@refs/tags/v9.0.0"),
@@ -69,6 +69,7 @@ class ReleaseTests(unittest.TestCase):
                             ("--predicate-type", "https://slsa.dev/provenance/v1")):
             self.assertEqual(command[command.index(flag) + 1], value)
         self.assertIn("--deny-self-hosted-runners", command)
+        self.assertNotIn("--signer-workflow", command)
         self.assertEqual(verify.call_args.kwargs["timeout"], 120)
 
     def test_missing_verifier_failure_and_timeout_fail_closed(self):
