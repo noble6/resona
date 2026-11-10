@@ -1,11 +1,15 @@
 """Offline controller regressions; no audio server or GUI is started."""
 import sys
 import json
+import threading
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from types import MethodType, SimpleNamespace
 from unittest.mock import Mock, patch
+
+from PySide6.QtCore import QCoreApplication, QEventLoop, QThread, QTimer
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 from resona.backend import Backend
@@ -162,9 +166,146 @@ class AppearanceTests(unittest.TestCase):
         controller._touch.assert_called_once_with()
 
 
+class ShutdownTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QCoreApplication.instance() or QCoreApplication([])
+
+    def setUp(self):
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        self.stack.enter_context(patch.dict("os.environ", {"RESONA_SCREENSHOT": "unused"}))
+        self.stack.enter_context(patch("resona.backend.SharedState"))
+        self.pipe = Mock(target=None, wait_ready=Mock(return_value=False), last_log=Mock(return_value="stopped"))
+        self.stack.enter_context(patch("resona.backend.pipeline.Pipeline", return_value=self.pipe))
+        self.run = self.stack.enter_context(patch("resona.backend.pipeline._run", return_value="[]"))
+        self.stack.enter_context(patch("resona.backend.QProcess"))
+        self.stack.enter_context(patch.object(Backend, "_load", return_value={}))
+        for name in ("_recompute_curve", "_push_correction", "_refresh_sinks", "refreshHardware", "_save"):
+            self.stack.enter_context(patch.object(Backend, name))
+        self.backend = Backend()
+        self.addCleanup(self.backend.shutdown)
+
+    def pump(self, milliseconds=30):
+        loop = QEventLoop()
+        QTimer.singleShot(milliseconds, loop.quit)
+        loop.exec()
+
+    def test_shutdown_cancels_initial_start_and_delayed_app_scan(self):
+        self.backend.shutdown()
+        self.pump(1600)
+        self.pipe.spawn.assert_not_called()
+        self.run.assert_not_called()
+
+    def test_late_start_results_do_not_revive_closed_backend(self):
+        self.backend._busy = True
+        self.backend._start_output_request = 0
+        self.backend.shutdown()
+        changed, toast = Mock(), Mock()
+        self.backend.stateChanged.connect(changed)
+        self.backend.toast.connect(toast)
+        self.backend._device_switched = Mock()
+        for success in (True, False):
+            self.backend._startDone.emit(success, "late-device")
+        self.assertFalse(self.backend.running)
+        self.assertFalse(self.backend.busy)
+        self.backend._device_switched.assert_not_called()
+        changed.assert_not_called()
+        toast.assert_not_called()
+        self.assertFalse(self.backend._save_timer.isActive())
+        self.assertFalse(self.backend._app_timer.isActive())
+
+    def test_shutdown_is_idempotent(self):
+        self.backend.shutdown()
+        self.backend.shutdown()
+        self.pipe.stop.assert_called_once_with(restore_default=True)
+        self.backend.shm.close.assert_called_once_with()
+
+    def test_inflight_readiness_cannot_revive_backend_after_shutdown(self):
+        entered, release, delivered = threading.Event(), threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+
+        def wait_ready(**kwargs):
+            entered.set()
+            if not release.wait(5):
+                raise TimeoutError("readiness worker was not released")
+            return True
+
+        self.pipe.wait_ready.side_effect = wait_ready
+        self.backend._startDone.connect(lambda success, target: delivered.set())
+        self.backend.startEngine()
+        self.assertTrue(entered.wait(5))
+        self.backend.shutdown()
+        release.set()
+        for _ in range(100):
+            self.pump(10)
+            if delivered.is_set():
+                break
+        self.assertTrue(delivered.is_set())
+        self.assertFalse(self.backend.running)
+        self.assertFalse(self.backend.busy)
+        self.pipe.spawn.assert_called_once()
+        self.pipe.stop.assert_called_once_with(restore_default=True)
+        self.assertFalse(self.backend._app_timer.isActive())
+
+    def test_open_backend_delivers_worker_result_on_gui_thread(self):
+        # Do not let the unrelated initial startup run while testing dispatch.
+        self.backend._busy = True
+        results, threads = [], []
+
+        def done(result):
+            results.append(result)
+            threads.append(QThread.currentThread())
+
+        self.backend._async(lambda: "result", done)
+        for _ in range(100):
+            self.pump(10)
+            if results:
+                break
+        self.assertEqual(results, ["result"])
+        self.assertEqual(threads, [self.app.thread()])
+
+    def test_late_pactl_event_does_not_rearm_timers(self):
+        self.backend.shutdown()
+        self.backend._sub.readAllStandardOutput.return_value = b"Event 'new' on sink #1\n"
+        self.backend._on_pactl_event()
+        self.backend._sub.readAllStandardOutput.assert_not_called()
+        for timer in (self.backend._evt_timer, self.backend._hw_timer, self.backend._vol_timer):
+            self.assertFalse(timer.isActive())
+
+    def test_worker_result_after_shutdown_is_not_delivered(self):
+        entered, release, emitted = threading.Event(), threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        done = Mock()
+
+        def work():
+            entered.set()
+            if not release.wait(5):
+                raise TimeoutError("test worker was not released")
+            return "late-result"
+
+        self.backend._call.connect(lambda callback, result: emitted.set())
+        self.backend._async(work, done)
+        self.assertTrue(entered.wait(5))
+        self.backend.shutdown()
+        release.set()
+        for _ in range(100):
+            self.pump(10)
+            if emitted.is_set():
+                break
+        self.assertTrue(emitted.is_set())
+        done.assert_not_called()
+
+    def test_closed_backend_does_not_schedule_new_workers(self):
+        self.backend.shutdown()
+        with patch("resona.backend.threading.Thread") as worker:
+            self.backend._async(Mock(), Mock())
+        worker.assert_not_called()
+
+
 class OutputRequestTests(unittest.TestCase):
     def test_busy_start_keeps_the_inflight_generation(self):
-        controller = SimpleNamespace(_busy=True, _output_request=2, _start_output_request=1,
+        controller = SimpleNamespace(_closing=False, _busy=True, _output_request=2, _start_output_request=1,
                                      _ir_timer=SimpleNamespace(start=Mock()))
         Backend.startEngine(controller)
         self.assertEqual(controller._start_output_request, 1)
@@ -172,6 +313,7 @@ class OutputRequestTests(unittest.TestCase):
 
     def controller(self, requested, started):
         return SimpleNamespace(
+            _closing=False,
             _state={"output": requested, "last_target": "previous"},
             _start_output_request=1, _output_request=1 if requested == started else 2,
             _device_switched=Mock(), _touch=Mock(), _sync_volume=Mock(),

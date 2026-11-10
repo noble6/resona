@@ -275,6 +275,7 @@ class UpdateControllerTests(unittest.TestCase):
         # Use the existing backend dispatcher without starting audio or any backend timers.
         dispatcher = Backend.__new__(Backend)
         QObject.__init__(dispatcher)
+        dispatcher._closing = False
         for closed in (False, True):
             entered, release, delivered = threading.Event(), threading.Event(), threading.Event()
             threads = []

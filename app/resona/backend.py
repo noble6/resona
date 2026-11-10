@@ -60,6 +60,7 @@ class Backend(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._closing = False
         self._state = self._load()
         self._state.setdefault("app_rules", dict(presets.APP_RULES_DEFAULT))
         self._params = dict(presets.DEFAULTS)
@@ -97,7 +98,7 @@ class Backend(QObject):
         self._auto_base: dict | None = None
         self._auto_app = ""
         self._captured: set[str] = set()
-        self._call.connect(lambda cb, res: cb(res))
+        self._call.connect(self._deliver)
         self._recompute_curve()
         self._push_correction()
 
@@ -131,7 +132,14 @@ class Backend(QObject):
         self._updates.toast.connect(self.toast)
 
     # ------------------------------------------------------------------ helpers
+    @Slot(object, object)
+    def _deliver(self, callback, result):
+        if not self._closing:
+            callback(result)
+
     def _async(self, fn, done):
+        if self._closing:
+            return
         def work():
             try:
                 res = fn()
@@ -171,6 +179,8 @@ class Backend(QObject):
     # ------------------------------------------------------------------ engine
     @Slot()
     def startEngine(self):
+        if self._closing:
+            return
         if self._busy:
             self._ir_timer.start()  # try again once the current start settles
             return
@@ -200,6 +210,8 @@ class Backend(QObject):
         threading.Thread(target=work, daemon=True).start()
 
     def _on_started(self, ok: bool, info: str):
+        if self._closing:
+            return
         self._busy = False
         self._quiet_until = time.monotonic() + 1.5
         self._running = ok
@@ -271,6 +283,11 @@ class Backend(QObject):
                 self.stateChanged.emit()
 
     def shutdown(self):
+        if self._closing:
+            return
+        self._closing = True
+        self._running = False
+        self._busy = False
         # stop every timer first: a late animation tick would read the shm after it is unmapped
         self._updates.close()
         for t in (self._anim, self._watchdog, self._app_timer,
@@ -290,6 +307,8 @@ class Backend(QObject):
 
     # ------------------------------------------------------------------ pactl events
     def _on_pactl_event(self):
+        if self._closing:
+            return
         data = bytes(self._sub.readAllStandardOutput()).decode(errors="replace")
         for line in data.splitlines():
             if " on sink #" in line and "'change'" in line:
@@ -347,6 +366,8 @@ class Backend(QObject):
 
     # ------------------------------------------------------------------ per-app profiles
     def _scan_apps(self):
+        if self._closing:
+            return
         out = pipeline._run("pactl", "-f", "json", "list", "sink-inputs")
         try:
             inputs = json.loads(out or "[]")
