@@ -2,11 +2,11 @@ name: CI
 on: [push, pull_request]
 jobs:
   engine:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix: { cc: [gcc, clang] }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Build DSP engine (${{ matrix.cc }}, warnings are errors)
         run: make -C engine CC=${{ matrix.cc }} CFLAGS="-O2 -ffast-math -fno-finite-math-only -Werror"
       - name: DSP test suite (44.1/48/96/192 kHz)
@@ -24,8 +24,8 @@ jobs:
           - { python: "3.12", qt: "6.7.3", runner: ubuntu-24.04 }
           - { python: "3.12", qt: "latest", runner: ubuntu-24.04-arm }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with: { python-version: "${{ matrix.python }}" }
       - name: Install Qt runtime libraries
         timeout-minutes: 5
@@ -79,9 +79,9 @@ jobs:
           PYTHONPATH=tests python -m unittest test_updates test_ipc test_qml
           PYTHONPATH=tests python -m unittest test_qml test_ipc test_updates
   sanitizers:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: DSP tests with address and undefined-behavior sanitizers
         run: >-
           make -C engine test CC=clang
@@ -130,8 +130,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with: { python-version: "3.12" }
       - name: Install PipeWire and Qt runtime libraries
         timeout-minutes: 5

@@ -4,9 +4,9 @@ import unittest
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PySide6.QtCore import QCoreApplication, QPointF, Qt
+from PySide6.QtCore import Property, QCoreApplication, QObject, QPointF, Qt
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtQml import QQmlApplicationEngine, QQmlPropertyMap
+from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -96,7 +96,6 @@ class KeyboardTests(unittest.TestCase):
         self.assertEqual(item.property("value"), 1)
 
     def test_settings_page_reveals_tab_focus_in_both_directions(self):
-        audio = QQmlPropertyMap()
         values = dict(
             follow=True, sinks=[], output="", userPresets=[], captureAll=True,
             perDevice=True, appAuto=True, autoApp="", apps=[], profiles=[],
@@ -105,8 +104,11 @@ class KeyboardTests(unittest.TestCase):
                             notes="", message="", last=0),
             autostart=False, version="test", sampleRate=48000, outputLayout={"name": "Stereo"},
         )
-        for key, value in values.items():
-            audio.insert(key, value)
+        audio_type = type("SettingsAudio", (QObject,), {
+            key: Property("QVariant", lambda self, key=key: values[key], constant=True)
+            for key in values
+        })
+        audio = audio_type()
         page = self.load('Pages.SettingsPage { objectName: "control"; anchors.fill: parent }',
                          audio=audio, width=1040, height=760)
         self.assertGreater(page.property("contentHeight"), page.height())
