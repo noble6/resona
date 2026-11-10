@@ -188,6 +188,22 @@ python3 tests/test_capture_live.py   # games that bypass the default device get 
 bash tests/run_pipewire.sh          # all live suites and UI smoke test on a private audio server
 ```
 
+For an opt-in end-to-end release check:
+
+```sh
+python3 tests/verify_release_upgrade.py --from-tag v2.2.2 --with-ui
+```
+
+This requires the normal build/runtime dependencies, `python-cryptography`, and
+`gh` for an independent signature check. It downloads genuine signed assets,
+cross-checks native and GitHub CLI verification, rejects a modified archive,
+installs the older release into a temporary prefix, and runs that installed
+copy's updater against the latest stable release. It checks settings/preset
+preservation and optionally launches the upgraded installed app on private
+PipeWire. No release is published and the user's installation is not changed.
+Use `--to-tag` to assert the expected latest release. This network/build test is
+not part of the offline CI suites.
+
 The 1.5 ms figure is DSP lookahead, not end-to-end playback latency. PipeWire
 buffers, convolution, resampling, and the output device add their own delay.
 DSP benchmark output reports percent of one CPU core at each tested sample rate;
