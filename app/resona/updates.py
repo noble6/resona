@@ -57,7 +57,8 @@ class UpdateController(QObject):
             if self._closed:
                 return
             if isinstance(res, Exception):
-                self._set_upd(state="error", message="Could not reach GitHub. Check your connection")
+                message = str(res) if isinstance(res, RuntimeError) else "Could not reach GitHub. Check your connection"
+                self._set_upd(state="error", message=message)
                 return
             self._state["update_last"] = time.time()
             self._touch()
