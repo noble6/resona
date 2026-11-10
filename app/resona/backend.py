@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import Property, QObject, QProcess, QTimer, QUrl, Signal, Slot
 
-from . import __version__, correction, hardware, persistence, pipeline, presets, validation
+from . import __version__, correction, correction_model, hardware, persistence, pipeline, presets, validation
 from .shm import SharedState
 from .desktop import exec_line
 from .updates import UpdateController
@@ -553,21 +553,15 @@ class Backend(QObject):
 
     # ------------------------------------------------------------------ correction
     def _push_correction(self):
-        c = self._state.get("correction") or {}
-        filters = c.get("filters", [])
         fs = self.shm.sample_rate
         self._corr_rate = fs
-        enabled = self._params.get("corr_on", 0)
-        if c.get("kind") == "vdc" and c.get("text"):
-            try:
-                filters = correction.parse_vdc(c["text"], fs)
-            except ValueError as e:
-                filters, enabled = [], 0
-                self.toast.emit(f"{e}; correction bypassed")
-        self.shm.write_corr(filters)
-        self.shm.write({"corr_on": enabled})
-        self._corr_curve = correction.response_db(filters, CURVE_FREQS, fs, c.get("preamp", 0)).round(2).tolist() \
-            if filters else [0.0] * len(CURVE_FREQS)
+        prepared = correction_model.prepare(self._state.get("correction"), fs, CURVE_FREQS,
+                                             self._params.get("corr_on", 0))
+        if prepared.warning:
+            self.toast.emit(prepared.warning)
+        self.shm.write_corr(prepared.filters)
+        self.shm.write({"corr_on": prepared.enabled})
+        self._corr_curve = prepared.curve
         self.correctionChanged.emit()
 
     def _set_correction(self, info: dict):
@@ -581,9 +575,7 @@ class Backend(QObject):
 
     @Property("QVariantMap", notify=correctionChanged)
     def correction(self):
-        c = self._state.get("correction") or {}
-        return {"name": c.get("name", ""), "source": c.get("source", ""), "kind": c.get("kind", ""),
-                "count": len(c.get("filters", [])) or c.get("count", 0), "preamp": c.get("preamp", 0)}
+        return correction_model.describe(self._state.get("correction"))
 
     @Property("QVariantList", notify=correctionChanged)
     def correctionCurve(self):
@@ -651,18 +643,7 @@ class Backend(QObject):
     def importCorrection(self, url: str):
         path = Path(to_path(url))
         try:
-            text = path.read_text(errors="replace")
-            if "SR_44100" in text or "SR_48000" in text or path.suffix.lower() == ".vdc":
-                filters = correction.parse_vdc(text, self.shm.sample_rate)
-                pre = correction.safe_preamp(filters, self.shm.sample_rate)
-                info = {"name": path.stem, "source": "ViPER DDC", "kind": "vdc", "text": text,
-                        "filters": filters, "count": len(filters), "preamp": pre}
-            else:
-                pre, filters = correction.parse_parametric(text)
-                if not filters:
-                    raise ValueError("no 'Filter: ON …' lines found")
-                info = {"name": path.stem, "source": "EqualizerAPO / AutoEq file", "kind": "parametric",
-                        "filters": filters, "preamp": pre}
+            info = correction_model.from_file(path, self.shm.sample_rate)
             self._set_correction(info)
         except (OSError, ValueError) as e:
             self.toast.emit(f"Import failed: {e}")
