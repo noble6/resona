@@ -12,10 +12,17 @@ jobs:
       - name: DSP test suite (44.1/48/96/192 kHz)
         run: make -C engine test CC=${{ matrix.cc }}
   python:
-    runs-on: ubuntu-24.04
+    name: python (${{ matrix.python }}, Qt ${{ matrix.qt }}, ${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     strategy:
-      matrix: { python: ["3.10", "3.12", "3.14"] }
+      matrix:
+        python: ["3.10", "3.12", "3.14"]
+        qt: ["latest"]
+        runner: [ubuntu-24.04]
+        include:
+          - { python: "3.12", qt: "6.7.3", runner: ubuntu-24.04 }
+          - { python: "3.12", qt: "latest", runner: ubuntu-24.04-arm }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,11 +31,35 @@ jobs:
         timeout-minutes: 5
         run: |
           # Avoid stalled Azure mirrors while retaining Ubuntu's signed repositories.
-          printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          if [[ "$RUNNER_ARCH" == X64 ]]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
           apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
           sudo apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update
-          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends libegl1 libopengl0
-      - run: pip install numpy PySide6
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends libegl1 libopengl0 libatomic1
+      - name: Install Python dependencies
+        env: { QT_VERSION: "${{ matrix.qt }}" }
+        run: |
+          if [[ "$QT_VERSION" == latest ]]; then
+            pip install numpy PySide6
+          else
+            pip install numpy "PySide6==$QT_VERSION"
+          fi
+      - name: Verify Qt runtime and architecture
+        env: { QT_VERSION: "${{ matrix.qt }}" }
+        run: |
+          python - <<'PY'
+          import os, platform
+          from PySide6.QtCore import qVersion
+          print("Qt", qVersion(), "architecture", platform.machine())
+          if os.environ["QT_VERSION"] != "latest":
+              assert qVersion() == os.environ["QT_VERSION"]
+          if os.environ["RUNNER_ARCH"] == "ARM64":
+              assert platform.machine() in ("aarch64", "arm64")
+          PY
+      - name: Native ARM64 DSP build and tests
+        if: matrix.runner == 'ubuntu-24.04-arm'
+        run: make -C engine test CC=gcc CFLAGS="-O2 -ffast-math -fno-finite-math-only -Werror"
       - name: Compile check
         run: python -m py_compile app/main.py app/resona/*.py packaging/install.py tests/*.py
       - name: Unit tests
