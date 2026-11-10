@@ -159,6 +159,34 @@ class UpdateControllerTests(unittest.TestCase):
             quit_app.assert_called_once_with()
         self.assertFalse(self.service._restart_timer.isActive())
 
+    def test_manual_restart_failure_keeps_app_open_and_reports_error(self):
+        self.available()
+        self.service.installUpdate()
+        with patch.object(updater, "relaunch", side_effect=OSError("launch denied")), \
+                patch("resona.updates.QCoreApplication.quit") as quit_app:
+            self.complete("/unused/resona")
+        quit_app.assert_not_called()
+        self.assertEqual(self.service.updateInfo["state"], "error")
+        self.assertIn("launch denied", self.service.updateInfo["message"])
+        self.assertIn("Close and reopen Resona", self.service.updateInfo["message"])
+        self.assertFalse(self.service._restart_timer.isActive())
+        self.assertIsNone(self.service._relaunch)
+        self.toasts.assert_called_once_with(self.service.updateInfo["message"])
+
+    def test_automatic_restart_failure_does_not_keep_retrying(self):
+        self.available()
+        self.service.installUpdate(automatic=True)
+        self.complete("/unused/resona")
+        self.processing = False
+        with patch.object(updater, "relaunch", side_effect=RuntimeError("launcher missing")) as relaunch, \
+                patch("resona.updates.QCoreApplication.quit") as quit_app:
+            self.service._try_restart()
+            self.service._restart_timer.timeout.emit()
+        relaunch.assert_called_once_with("/unused/resona", hidden=False)
+        quit_app.assert_not_called()
+        self.assertEqual(self.service.updateInfo["state"], "error")
+        self.assertFalse(self.service._restart_timer.isActive())
+
     def test_schedule_respects_frequency_last_check_and_exact_boundary(self):
         now = 1000000
         for frequency, last, due in (

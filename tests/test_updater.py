@@ -1,16 +1,95 @@
 """Offline update tests; no network request or real installation is performed."""
 import io
 import json
+import os
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 from resona import updater
+
+
+class RelaunchTests(unittest.TestCase):
+    def wait_for_file(self, path, seconds=5):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if path.exists():
+                return True
+            time.sleep(0.05)
+        return False
+
+    def test_relaunch_waits_for_slow_parent_exit_and_preserves_arguments(self):
+        for hidden in (False, True):
+            with self.subTest(hidden=hidden), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                marker, ready = root / "launched.json", root / "ready"
+                launcher = root / "launcher ' ; % name"
+                launcher.write_text(f"#!{sys.executable}\n" +
+                                    "import json, os, sys\nfrom pathlib import Path\n" +
+                                    f"target = Path({str(marker)!r})\n" +
+                                    "temporary = target.with_suffix('.tmp')\n" +
+                                    "temporary.write_text(json.dumps(dict(args=sys.argv[1:], sid=os.getsid(0))))\n" +
+                                    "temporary.replace(target)\n")
+                launcher.chmod(0o755)
+                parent = subprocess.Popen(
+                    [sys.executable, "-c", """
+import sys
+from pathlib import Path
+from resona import updater
+updater.relaunch(sys.argv[1], hidden=sys.argv[3] == '1')
+Path(sys.argv[2]).write_text('ready')
+sys.stdin.read()
+""", str(launcher), str(ready), str(int(hidden))],
+                    env=dict(os.environ, PYTHONPATH=str(Path(updater.__file__).resolve().parents[1])),
+                    stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                )
+                try:
+                    self.assertTrue(self.wait_for_file(ready), "test parent did not schedule relaunch")
+                    time.sleep(2.3)
+                    self.assertFalse(marker.exists(), "replacement started before the old process exited")
+                    parent.stdin.close()
+                    # Do not reap the parent yet: a zombie must not block the replacement.
+                    self.assertTrue(self.wait_for_file(marker), "replacement did not start after parent exit")
+                    result = json.loads(marker.read_text())
+                    self.assertEqual(result["args"], ["--hidden"] if hidden else [])
+                    self.assertNotEqual(result["sid"], os.getsid(0))
+                finally:
+                    if not parent.stdin.closed:
+                        parent.stdin.close()
+                    parent.wait(timeout=5)
+                    self.wait_for_file(marker)
+                    parent.stderr.close()
+
+    def test_invalid_launcher_is_rejected_before_scheduling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            nonexecutable = root / "not-executable"
+            nonexecutable.write_text("not a launcher")
+            for launcher in (root / "missing", nonexecutable, root):
+                with self.subTest(launcher=launcher), patch.object(updater.subprocess, "Popen") as spawn:
+                    with self.assertRaisesRegex(RuntimeError, "launcher"):
+                        updater.relaunch(str(launcher), hidden=False)
+                    spawn.assert_not_called()
+
+    def test_reused_pid_does_not_block_relaunch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "launched"
+            launcher = Path(directory) / "launcher"
+            launcher.write_text(f"#!{sys.executable}\nfrom pathlib import Path\nPath({str(marker)!r}).touch()\n")
+            launcher.chmod(0o755)
+            result = subprocess.run(
+                [sys.executable, "-I", "-c", updater._RELAUNCH_SCRIPT,
+                 str(os.getpid()), "different-start-time", str(launcher)],
+                capture_output=True, text=True, timeout=5,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(marker.exists())
 
 
 class UpdateTests(unittest.TestCase):

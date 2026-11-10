@@ -5,8 +5,8 @@ import json
 import gzip
 import os
 import re
-import shlex
 import subprocess
+import sys
 import tarfile
 import tempfile
 import urllib.error
@@ -168,8 +168,35 @@ def install(info: dict) -> str:
     return str(prefix / "bin" / "resona")
 
 
+_RELAUNCH_SCRIPT = """
+import os
+import sys
+import time
+from pathlib import Path
+
+pid, started, launcher, *arguments = sys.argv[1:]
+status = Path('/proc') / pid / 'stat'
+while True:
+    try:
+        fields = status.read_text().rsplit(')', 1)[1].split()
+    except (FileNotFoundError, ProcessLookupError):
+        break
+    # Start time distinguishes PID reuse; zombies have already released their sockets.
+    if fields[19] != started or fields[0] in ('Z', 'X'):
+        break
+    time.sleep(0.1)
+os.execv(launcher, [launcher, *arguments])
+"""
+
+
 def relaunch(launcher: str, hidden: bool):
     """Start the new version once this process has exited (single-instance lock is released on quit)."""
-    args = shlex.quote(launcher) + (" --hidden" if hidden else "")
-    subprocess.Popen(["setsid", "-f", "sh", "-c", f"sleep 2; exec {args}"],
-                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    launcher = str(Path(launcher).absolute())
+    if not Path(launcher).is_file() or not os.access(launcher, os.X_OK):
+        raise RuntimeError("Updated launcher is missing or not executable")
+    pid = os.getpid()
+    started = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+    arguments = [launcher, "--hidden"] if hidden else [launcher]
+    subprocess.Popen([sys.executable, "-I", "-c", _RELAUNCH_SCRIPT, str(pid), started, *arguments],
+                     start_new_session=True, stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

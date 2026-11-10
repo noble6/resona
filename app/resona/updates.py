@@ -100,7 +100,14 @@ class UpdateController(QObject):
         if self._closed or not self._relaunch or (not force and self._is_processing()):
             return
         self._restart_timer.stop()
-        updater.relaunch(self._relaunch, hidden=not self._is_visible())
+        try:
+            updater.relaunch(self._relaunch, hidden=not self._is_visible())
+        except (OSError, RuntimeError) as e:
+            self._relaunch = None
+            message = f"Update installed, but restart failed: {e}. Close and reopen Resona."
+            self._set_upd(state="error", message=message)
+            self.toast.emit(message)
+            return
         QCoreApplication.quit()
 
     @property
