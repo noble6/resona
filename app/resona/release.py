@@ -1,4 +1,5 @@
 """Fail-closed policy for source archives signed by Resona's release workflow."""
+import hashlib
 import json
 import re
 import shutil
@@ -72,11 +73,41 @@ def validate_info(info):
     return archive
 
 
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for chunk in iter(lambda: stream.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_native(archive, bundle, info):
+    """Built-in offline Sigstore verification. Returns False when it cannot judge the bundle."""
+    try:
+        from . import sigstore_verify
+    except ImportError:          # python-cryptography missing
+        return False
+    try:
+        with open(bundle, "rb") as stream:
+            data = json.loads(stream.read(MAX_BUNDLE_BYTES + 1))
+        sigstore_verify.verify_bundle(
+            data, _sha256_file(archive), repo=REPO, workflow=WORKFLOW, tag=info["tag"],
+            commit=info["commit"], subject_name=f"resona-{info['tag']}.tar.gz")
+    except sigstore_verify.UnsupportedBundle:
+        return False             # a newer bundle format: let gh decide if it is available
+    except Exception as error:   # any other doubt refuses the update, never falls through
+        raise RuntimeError("Update authenticity verification failed; installation refused") from error
+    return True
+
+
 def verify(archive, bundle, info):
     validate_info(info)
+    if _verify_native(archive, bundle, info):
+        return
     executable = shutil.which("gh")
     if not executable:
-        raise RuntimeError("Install a current GitHub CLI (gh) to verify update attestations")
+        raise RuntimeError("Could not verify this update here. Install python-cryptography (or the GitHub CLI), "
+                           "or update Resona manually")
     command = [executable, "attestation", "verify", str(archive), "--bundle", str(bundle),
                "--hostname", "github.com", "--repo", REPO,
                "--cert-identity", f"https://github.com/{WORKFLOW}@refs/tags/{info['tag']}",
