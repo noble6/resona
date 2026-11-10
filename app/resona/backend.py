@@ -12,11 +12,12 @@ import time
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Property, QCoreApplication, QObject, QProcess, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import Property, QObject, QProcess, QTimer, QUrl, Signal, Slot
 
-from . import __version__, correction, hardware, pipeline, presets, updater, validation
+from . import __version__, correction, hardware, pipeline, presets, validation
 from .shm import SharedState
 from .desktop import exec_line
+from .updates import UpdateController
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "resona"
 STATE_FILE = CONFIG_DIR / "state.json"
@@ -127,14 +128,10 @@ class Backend(QObject):
         QTimer.singleShot(0, self.startEngine)
         QTimer.singleShot(1500, self._scan_apps)
 
-        self._upd = {"state": "idle", "message": "", "version": "", "notes": "", "url": ""}
-        self._upd_info: dict = {}
-        self._relaunch: str | None = None
-        self._upd_timer = QTimer(self, interval=6 * 3600 * 1000, timeout=self._maybe_check_updates)
-        self._upd_timer.start()
-        self._restart_timer = QTimer(self, interval=15000, timeout=self._try_restart)
-        if not os.environ.get("RESONA_SCREENSHOT"):
-            QTimer.singleShot(45000, self._maybe_check_updates)
+        self._updates = UpdateController(self._state, self._async, self._touch,
+                                         lambda: self._processing, lambda: self._visuals, self)
+        self._updates.updateChanged.connect(self.updateChanged)
+        self._updates.toast.connect(self.toast)
 
     # ------------------------------------------------------------------ helpers
     def _async(self, fn, done):
@@ -281,7 +278,8 @@ class Backend(QObject):
 
     def shutdown(self):
         # stop every timer first: a late animation tick would read the shm after it is unmapped
-        for t in (self._anim, self._watchdog, self._upd_timer, self._restart_timer, self._app_timer,
+        self._updates.close()
+        for t in (self._anim, self._watchdog, self._app_timer,
                   self._hw_timer, self._evt_timer, self._vol_timer, self._ir_timer):
             t.stop()
         if self._auto_base:
@@ -1003,88 +1001,25 @@ class Backend(QObject):
         self._touch()
 
     # ------------------------------------------------------------------ updates
-    def _set_upd(self, **kw):
-        self._upd.update(kw)
-        self.updateChanged.emit()
-
-    def _maybe_check_updates(self):
-        days = updater.FREQ_DAYS.get(self._state.get("update_freq", "weekly"), 7)
-        if days and time.time() - self._state.get("update_last", 0) >= days * 86400:
-            self._check_updates(manual=False)
-
     @Slot()
     def checkUpdates(self):
-        self._check_updates(manual=True)
-
-    def _check_updates(self, manual: bool):
-        if self._upd["state"] in ("checking", "installing", "restarting"):
-            return
-        self._set_upd(state="checking", message="Checking GitHub releases…")
-
-        def done(res):
-            if isinstance(res, Exception):
-                self._set_upd(state="error", message="Could not reach GitHub. Check your connection")
-                return
-            self._state["update_last"] = time.time()
-            self._touch()
-            self._upd_info = res
-            if not res["available"]:
-                self._set_upd(state="current", version=res["version"], notes="",
-                              message=f"You're on the latest version ({__version__})")
-                return
-            self._set_upd(state="available", version=res["version"], notes=res["notes"], url=res["url"],
-                          message=f"Resona {res['version']} is available")
-            kind = updater.install_kind()
-            if not manual and self._state.get("update_auto", True) and kind == "user":
-                self.toast.emit(f"Updating Resona to {res['version']}")
-                self.installUpdate(automatic=True)
-            elif not manual:
-                self.toast.emit(f"Resona {res['version']} is available. Open Settings to update")
-        self._async(updater.check, done)
+        self._updates.checkUpdates()
 
     @Slot()
     def installUpdate(self, automatic: bool = False):
-        if self._upd["state"] != "available" or not self._upd_info:
-            return
-        self._set_upd(state="installing", message=f"Downloading and building {self._upd_info['version']}…")
-
-        def done(res):
-            if isinstance(res, Exception):
-                self._set_upd(state="available", message=str(res))
-                self.toast.emit(f"Update failed: {res}")
-                return
-            self._relaunch = res
-            self._set_upd(state="restarting", message=f"Installed {self._upd_info['version']}. Restarting Resona…")
-            self._restart_timer.start()
-            self._try_restart(force=not automatic)
-        self._async(lambda: updater.install(self._upd_info), done)
-
-    def _try_restart(self, force: bool = False):
-        # an automatic update waits for a quiet moment so music or a game is never cut off
-        if not self._relaunch or (not force and self._processing):
-            return
-        self._restart_timer.stop()
-        updater.relaunch(self._relaunch, hidden=not self._visuals)
-        QCoreApplication.quit()
+        self._updates.installUpdate(automatic=automatic)
 
     @Property("QVariantMap", notify=updateChanged)
     def updateInfo(self):
-        return dict(self._upd, current=__version__, kind=updater.install_kind(),
-                    freq=self._state.get("update_freq", "weekly"), auto=self._state.get("update_auto", True),
-                    last=self._state.get("update_last", 0))
+        return self._updates.updateInfo
 
     @Slot(str)
     def setUpdateFreq(self, freq: str):
-        if freq in updater.FREQ_DAYS:
-            self._state["update_freq"] = freq
-            self._touch()
-            self.updateChanged.emit()
+        self._updates.setUpdateFreq(freq)
 
     @Slot(bool)
     def setUpdateAuto(self, on: bool):
-        self._state["update_auto"] = bool(on)
-        self._touch()
-        self.updateChanged.emit()
+        self._updates.setUpdateAuto(on)
 
     @Property(str, constant=True)
     def version(self):
