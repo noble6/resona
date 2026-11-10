@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -14,14 +13,11 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import Property, QObject, QProcess, QTimer, QUrl, Signal, Slot
 
-from . import __version__, correction, hardware, pipeline, presets, validation
+from . import __version__, correction, hardware, persistence, pipeline, presets, validation
 from .shm import SharedState
 from .desktop import exec_line
 from .updates import UpdateController
 
-CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "resona"
-STATE_FILE = CONFIG_DIR / "state.json"
-PRESET_DIR = CONFIG_DIR / "presets"
 AUTOSTART = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "autostart" / "resona.desktop"
 
 EQ_FREQS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
@@ -144,21 +140,15 @@ class Backend(QObject):
         threading.Thread(target=work, daemon=True).start()
 
     def _load(self) -> dict:
-        try:
-            return validation.state(json.loads(STATE_FILE.read_text()))
-        except (OSError, ValueError):
-            return {}
+        return persistence.load_state()
 
     def _save(self):
         self._state["params"] = {k: v for k, v in self._params.items() if k not in ("sysvol_db", "layout")}
         if self._auto_base:  # never persist a temporary per-app profile
             self._state["params"] = self._auto_base["params"]
         try:
-            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            tmp = STATE_FILE.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self._state, indent=1))
-            tmp.replace(STATE_FILE)
-        except OSError as e:
+            persistence.save_state(self._state)
+        except (OSError, TypeError, ValueError) as e:
             print("resona: could not save state:", e, file=sys.stderr)
 
     def _touch(self):
@@ -732,21 +722,21 @@ class Backend(QObject):
     # ------------------------------------------------------------------ user presets
     @Property("QVariantList", notify=presetsChanged)
     def userPresets(self):
-        try:
-            return sorted(p.stem for p in PRESET_DIR.glob("*.json"))
-        except OSError:
-            return []
+        return persistence.user_presets()
 
     def _preset_path(self, name: str) -> Path:
-        return PRESET_DIR / (re.sub(r"[^\w\- ]", "_", name).strip() + ".json")
+        return persistence.preset_path(name)
 
     @Slot(str)
     def savePreset(self, name: str):
         if not name.strip():
             return
-        PRESET_DIR.mkdir(parents=True, exist_ok=True)
-        data = {"resona_preset": 1, **self._snapshot(), "correction": self._state.get("correction")}
-        self._preset_path(name).write_text(json.dumps(data, indent=1))
+        try:
+            data = {"resona_preset": 1, **self._snapshot(), "correction": self._state.get("correction")}
+            persistence.write_json(self._preset_path(name), data)
+        except (OSError, TypeError, ValueError) as e:
+            self.toast.emit(f"Preset: {e}")
+            return
         self.presetsChanged.emit()
         self.toast.emit(f"Saved “{name.strip()}”")
 
@@ -764,26 +754,21 @@ class Backend(QObject):
     @Slot(str)
     def loadPreset(self, name: str):
         try:
-            self._load_preset_data(json.loads(self._preset_path(name).read_text()), name)
+            self._load_preset_data(persistence.read_json(self._preset_path(name)), name)
         except (OSError, ValueError, json.JSONDecodeError) as e:
             self.toast.emit(f"Preset: {e}")
 
     @Slot(str)
     def deletePreset(self, name: str):
-        try:
-            self._preset_path(name).unlink()
-        except OSError:
-            pass
+        persistence.delete_preset(name)
         self.presetsChanged.emit()
 
     @Slot(str)
     def importPreset(self, url: str):
         path = Path(to_path(url))
         try:
-            data = json.loads(path.read_text())
+            data = persistence.import_preset(path, self._preset_path(path.stem))
             self._load_preset_data(data, path.stem)
-            PRESET_DIR.mkdir(parents=True, exist_ok=True)
-            shutil.copy(path, self._preset_path(path.stem))
             self.presetsChanged.emit()
         except (OSError, ValueError, json.JSONDecodeError) as e:
             self.toast.emit(f"Import failed: {e}")
@@ -794,7 +779,7 @@ class Backend(QObject):
             dest = Path(to_path(url))
             if dest.suffix != ".json":
                 dest = dest.with_suffix(".json")
-            shutil.copy(self._preset_path(name), dest)
+            persistence.copy_file(self._preset_path(name), dest)
             self.toast.emit(f"Exported to {dest.name}")
         except OSError as e:
             self.toast.emit(f"Export failed: {e}")
