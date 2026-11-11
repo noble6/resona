@@ -169,11 +169,7 @@ Item {
         preventStealing: true
         onPressed: (e) => { root.forceActiveFocus(); root.setFromX(e.x) }
         onPositionChanged: (e) => { if (pressed) root.setFromX(e.x) }
-        onWheel: (w) => {
-            const step = root.stepSize > 0 ? root.stepSize : (root.to - root.from) / 50
-            let v = root.value + (w.angleDelta.y > 0 ? step : -step)
-            root.moved(Math.max(root.from, Math.min(root.to, v)))
-        }
+        // no wheel handler on purpose: the wheel scrolls the page and never changes a setting
         onDoubleClicked: if (root.bipolar) root.moved(0)
     }
 }

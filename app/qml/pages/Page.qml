@@ -13,6 +13,27 @@ Flickable {
     contentHeight: body.y + body.implicitHeight + 40
     clip: true
     boundsBehavior: Flickable.StopAtBounds
+
+    // Mouse wheels scroll a fixed, smooth step per notch (touchpads keep Qt's native scrolling).
+    // Sliders and EQ points ignore the wheel, so it always scrolls the page.
+    readonly property real wheelStep: 72 * 1.01      // Qt's default notch (3 lines x 24 px), +1 %
+    WheelHandler {
+        acceptedDevices: PointerDevice.Mouse
+        target: null
+        onWheel: (event) => {
+            if (event.angleDelta.y === 0) return
+            const maxY = root.originY + Math.max(0, root.contentHeight - root.height)
+            const from = wheelAnim.running ? wheelAnim.to : root.contentY
+            const to = Math.max(root.originY, Math.min(maxY, from - event.angleDelta.y / 120 * root.wheelStep))
+            root.cancelFlick()
+            wheelAnim.stop()
+            wheelAnim.from = root.contentY
+            wheelAnim.to = to
+            wheelAnim.start()
+            event.accepted = true
+        }
+    }
+    NumberAnimation { id: wheelAnim; target: root; property: "contentY"; duration: Theme.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic }
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
     function revealFocus() {

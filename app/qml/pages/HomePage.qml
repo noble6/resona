@@ -233,6 +233,7 @@ Page {
         EffectCard {
             id: bassCard
             Layout.fillWidth: true; Layout.fillHeight: true
+            resetKeys: ["bass_on", "bass_type", "bass_amt", "bass_punch", "bass_freq"]
             title: "DeepBass"; subtitle: "Psychoacoustic bass you feel even on tiny speakers"
             icon: "bass"; shape: "cookie9"; toggleKey: "bass_on"
             readonly property int bassType: Math.round(audio.params.bass_type || 0)
@@ -257,12 +258,14 @@ Page {
         }
         EffectCard {
             Layout.fillWidth: true; Layout.fillHeight: true
+            resetKeys: ["clar_on", "clar_amt"]
             title: "Clarity"; subtitle: "Restores detail and air lost in compression"
             icon: "sparkle"; shape: "burst12"; toggleKey: "clar_on"
             ParamSlider { Layout.fillWidth: true; key: "clar_amt"; label: "Detail" }
         }
         EffectCard {
             Layout.fillWidth: true; Layout.fillHeight: true
+            resetKeys: ["stage_on", "stage_width", "stage_depth"]
             title: "3D Stage"; subtitle: "Pushes sound outside your head"
             icon: "space"; shape: "flower8"; toggleKey: "stage_on"
             ParamSlider { Layout.fillWidth: true; key: "stage_width"; label: "Width"; from: 0; to: 2
@@ -270,6 +273,7 @@ Page {
         }
         EffectCard {
             Layout.fillWidth: true; Layout.fillHeight: true
+            resetKeys: ["voice_on", "voice_amt"]
             title: "Voice Focus"; subtitle: "Dialogue cuts through music and effects"
             icon: "mic"; shape: "pill"; toggleKey: "voice_on"
             ParamSlider { Layout.fillWidth: true; key: "voice_amt"; label: "Focus" }

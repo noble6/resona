@@ -5,7 +5,7 @@ import "../components"
 Page {
     id: page
     title: "Equalizer"
-    subtitle: "Drag the points. Double-click to zero a band. Scroll for fine steps."
+    subtitle: "Drag the points. Double-click to zero a band. Arrow keys for fine steps."
     headerRight: [
         Row {
             spacing: 12
@@ -58,6 +58,7 @@ Page {
         columns: 2; columnSpacing: 16
         EffectCard {
             Layout.fillWidth: true
+            resetKeys: ["preamp"]
             title: "Preamp"; subtitle: "Headroom before the effects chain"
             icon: "volume"; shape: "cookie6"
             ParamSlider { Layout.fillWidth: true; key: "preamp"; label: "Gain"; from: -12; to: 12; bipolar: true; stepSize: 0.5
@@ -65,6 +66,7 @@ Page {
         }
         EffectCard {
             Layout.fillWidth: true
+            resetKeys: ["output"]
             title: "Output"; subtitle: "Final level after all processing"
             icon: "speakers"; shape: "gem"
             ParamSlider { Layout.fillWidth: true; key: "output"; label: "Gain"; from: -12; to: 12; bipolar: true; stepSize: 0.5
@@ -74,6 +76,7 @@ Page {
 
     EffectCard {
         width: parent.width
+        resetKeys: ["ieq_on", "ieq_amt", "ieq_target"]
         title: "Intelligent EQ"; subtitle: "Listens to what's playing and steers the tonal balance, song by song and scene by scene"
         icon: "sparkle"; shape: "sunny"; toggleKey: "ieq_on"
         RowLayout {

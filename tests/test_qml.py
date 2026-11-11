@@ -133,6 +133,70 @@ class KeyboardTests(unittest.TestCase):
             self.assertGreater(visited, 10)
             self.assertTrue(scrolled, "test must reach controls below the initial viewport")
 
+    def send_wheel(self, x, y, notches=1):
+        from PySide6.QtCore import QPoint
+        from PySide6.QtGui import QWheelEvent
+        pos = QPointF(x, y)
+        for _ in range(notches):
+            event = QWheelEvent(pos, self.window.mapToGlobal(pos), QPoint(0, 0), QPoint(0, -120),
+                                Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+                                Qt.ScrollPhase.NoScrollPhase, False)
+            QCoreApplication.sendEvent(self.window, event)
+        QTest.qWait(30)
+
+    def test_wheel_scrolls_the_page_and_never_changes_controls(self):
+        values = dict(params={"bass_amt": 0.5}, reducedMotion=True, processing=False)
+        audio_type = type("WheelAudio", (QObject,), {
+            key: Property("QVariant", lambda self, key=key: values[key], constant=True) for key in values})
+        audio = audio_type()
+        page = self.load('''Pages.Page {
+                objectName: "control"; anchors.fill: parent; title: "Wheel"
+                WavySlider { width: 360; value: 0.5; objectName: "s0"; onMoved: (v) => value = v }
+                WavySlider { width: 360; value: 0.5; objectName: "s1"; onMoved: (v) => value = v }
+                WavySlider { width: 360; value: 0.5; objectName: "s2"; onMoved: (v) => value = v }
+                Rectangle { width: 10; height: 1600 }
+            }''', audio=audio, width=400, height=400)
+        slider = self.window.findChild(QQuickItem, "s1")
+        centre = slider.mapToItem(self.window.contentItem(), QPointF(slider.width() / 2, slider.height() / 2))
+        self.send_wheel(centre.x(), centre.y())
+        self.assertAlmostEqual(page.property("contentY"), 72 * 1.01, delta=0.5)
+        self.assertEqual(slider.property("value"), 0.5)
+        self.send_wheel(200, 200, notches=100)                 # clamps at the end of the page
+        self.assertAlmostEqual(page.property("contentY") + page.height(), page.property("contentHeight"), delta=1)
+
+    def test_effect_reset_button_appears_only_when_changed(self):
+        class ResetAudio(QObject):
+            def __init__(self):
+                super().__init__()
+                self.calls = []
+            params = Property("QVariant", lambda self: {"bass_on": 1, "bass_amt": 0.9}, constant=True)
+            profileParams = Property("QVariant", lambda self: {"bass_on": 1, "bass_amt": 0.45}, constant=True)
+            processing = Property(bool, lambda self: False, constant=True)
+            reducedMotion = Property(bool, lambda self: True, constant=True)
+
+            from PySide6.QtCore import Slot
+
+            @Slot(list)
+            def resetEffect(self, keys):
+                self.calls.append(list(keys))
+
+            @Slot(str, float)
+            def setParam(self, *_):
+                pass
+        audio = ResetAudio()
+        card = self.load('''EffectCard { objectName: "control"; width: 380; title: "DeepBass"; toggleKey: "bass_on"
+                                         resetKeys: ["bass_on", "bass_amt"] }''', audio=audio, width=400)
+        self.assertTrue(card.property("changed"))
+        button = next(b for b in self.window.findChildren(QQuickItem)
+                      if b.property("icon") == "reset")
+        self.assertTrue(button.isVisible() and button.isEnabled())
+        QTest.mouseClick(self.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+                         button.mapToItem(self.window.contentItem(), QPointF(20, 20)).toPoint())
+        self.assertEqual(audio.calls, [["bass_on", "bass_amt"]])
+        same = self.load('''EffectCard { objectName: "control"; width: 380; title: "Clarity"
+                                         resetKeys: ["bass_on"] }''', audio=audio, width=400)
+        self.assertFalse(same.property("changed"))
+
 
 if __name__ == "__main__":
     unittest.main()

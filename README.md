@@ -61,6 +61,7 @@ Windows laptops ship with Dolby Atmos, DTS:X or a Realtek console. Android has D
 - **Catches every app.** Games that open your speakers directly (FMOD/Wwise titles such as War Thunder) get routed through Resona automatically, so effects and the volume keys apply to them too
 - **Follows your output.** Plug in headphones or switch devices from the tray and Resona moves with you
 - **Hold to compare.** Instant A/B against the untouched signal
+- **Reset any single effect.** A reset button appears on an effect once you change it and puts just that effect back to how your profile tunes it
 - **Presets** you can save, import and share as JSON
 - **Updates itself** from GitHub releases: only when you ask, weekly or monthly. Automatic installs wait for a quiet moment, so music or a game is never cut off
 
@@ -228,7 +229,7 @@ Some of what these suites verify: bit-transparent output with effects neutral; E
 
 ## Shortcuts
 
-`Ctrl+1…7` switch pages · `Space` toggles effects · scroll on any slider or EQ point for fine steps · double-click an EQ point to zero it
+`Ctrl+1…7` switch pages · `Space` toggles effects · arrow keys on a focused slider or EQ point for fine steps · double-click an EQ point to zero it
 
 ## Contributing
 

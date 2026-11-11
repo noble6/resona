@@ -9,6 +9,14 @@ Card {
     property string icon: "sparkle"
     property string shape: "cookie9"
     property string toggleKey: ""
+    // settings this card controls; the reset button puts them back to the current profile's values
+    property var resetKeys: []
+    readonly property bool changed: {
+        const ref = audio.profileParams, p = audio.params
+        for (const k of resetKeys)
+            if (ref[k] !== undefined && Math.abs((p[k] || 0) - ref[k]) > 1e-4) return true
+        return false
+    }
     readonly property bool on: toggleKey === "" || !!audio.params[toggleKey]
     default property alias content: body.data
     implicitHeight: col.implicitHeight + 2 * pad
@@ -39,6 +47,24 @@ Card {
                 Label { text: root.title; role: "titleL"; emphasized: true }
                 Label { text: root.subtitle; role: "body"; color: Theme.inkVariant
                         Layout.fillWidth: true; elide: Text.ElideRight }
+            }
+            // fixed slot so the header never shifts when the button appears
+            Item {
+                visible: root.resetKeys.length > 0
+                Layout.preferredWidth: 40; Layout.preferredHeight: 40
+                Btn {
+                    id: resetBtn
+                    anchors.centerIn: parent
+                    icon: "reset"; variant: "text"; size: 40
+                    Accessible.name: "Reset " + root.title + " to the profile"
+                    enabled: root.changed
+                    visible: opacity > 0.01
+                    opacity: root.changed ? 1 : 0
+                    scale: root.changed ? 1 : 0.6
+                    Behavior on opacity { NumberAnimation { duration: Theme.fast } }
+                    Behavior on scale { NumberAnimation { duration: Theme.medium; easing.type: Easing.OutBack } }
+                    onClicked: audio.resetEffect(root.resetKeys)
+                }
             }
             M3Switch {
                 Accessible.name: root.title

@@ -22,6 +22,7 @@ Page {
             spacing: 16
             EffectCard {
                 Layout.fillWidth: true
+                resetKeys: ["stage_on", "stage_width", "stage_depth"]
                 title: "3D Stage"; subtitle: "Bass-safe widening + early reflections"
                 icon: "space"; shape: "flower8"; toggleKey: "stage_on"
                 ParamSlider { Layout.fillWidth: true; key: "stage_width"; label: "Width"; from: 0; to: 2
@@ -32,6 +33,7 @@ Page {
                 id: hpCard
                 Layout.fillWidth: true
                 readonly property string mode: audio.params.hrtf_on ? "hrtf" : (audio.params.xfeed_on ? "xfeed" : "off")
+                resetKeys: ["xfeed_on", "xfeed_amt", "hrtf_on", "hrtf_angle", "hrtf_amt"]
                 title: "Headphone spatial"
                 subtitle: mode === "hrtf" ? "Binaural virtual speakers with head-shadow, ITD and pinna cues"
                         : mode === "xfeed" ? "Crossfeed: speaker-like imaging, less fatigue" : "Off: direct stereo"
@@ -51,6 +53,7 @@ Page {
             }
             EffectCard {
                 Layout.fillWidth: true
+                resetKeys: ["amb_on", "amb_mix", "amb_size", "amb_damp"]
                 title: "Ambience"; subtitle: "A real room around your music"
                 icon: "room"; shape: "burst12"; toggleKey: "amb_on"
                 ParamSlider { Layout.fillWidth: true; key: "amb_mix"; label: "Mix" }
@@ -64,6 +67,7 @@ Page {
     EffectCard {
         width: parent.width
         readonly property bool multi: audio.outputLayout.channels > 2
+        resetKeys: ["upmix_on", "upmix_center", "upmix_surr", "upmix_lfe"]
         title: "Surround upmix"
         subtitle: multi ? "Stereo → " + audio.outputLayout.name + ": steered centre for dialogue, decorrelated surrounds, LFE"
                         : "Your output is stereo. Pick a 5.1, 7.1 or AC3 mode on the Hardware page to unlock"

@@ -174,7 +174,6 @@ Item {
                     audio.setParam(h.key, g)
                 }
                 onDoubleClicked: audio.setParam(h.key, 0)
-                onWheel: (w) => audio.setParam(h.key, Math.max(-15, Math.min(15, h.gain + (w.angleDelta.y > 0 ? 0.5 : -0.5))))
             }
         }
     }

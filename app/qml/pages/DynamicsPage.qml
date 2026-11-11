@@ -13,6 +13,7 @@ Page {
             spacing: 16
             EffectCard {
                 Layout.fillWidth: true
+                resetKeys: ["lev_on", "lev_amt", "lev_target"]
                 title: "Smart Leveler"; subtitle: "No more volume jumps between songs, ads and scenes"
                 icon: "speed"; shape: "cookie9"; toggleKey: "lev_on"
                 ParamSlider { Layout.fillWidth: true; key: "lev_amt"; label: "Strength" }
@@ -22,6 +23,7 @@ Page {
             }
             EffectCard {
                 Layout.fillWidth: true
+                resetKeys: ["loud_on", "loud_amt"]
                 title: "Adaptive Loudness"; subtitle: "Full bass and treble even when the volume is low"
                 icon: "volume"; shape: "flower8"; toggleKey: "loud_on"
                 ParamSlider { Layout.fillWidth: true; key: "loud_amt"; label: "Compensation" }
@@ -29,6 +31,7 @@ Page {
             }
             EffectCard {
                 Layout.fillWidth: true
+                resetKeys: ["lim_on", "lim_ceil"]
                 title: "Limiter"; subtitle: "Lookahead brickwall that protects ears and speakers"
                 icon: "shield"; shape: "gem"; toggleKey: "lim_on"
                 ParamSlider { Layout.fillWidth: true; key: "lim_ceil"; label: "Ceiling"; from: -6; to: 0; stepSize: 0.1
@@ -81,6 +84,7 @@ Page {
 
     EffectCard {
         width: parent.width
+        resetKeys: ["tube_on", "tube_drive"]
         title: "Tube Warmth"; subtitle: "Analog even-harmonic saturation, the glow of a valve amp"
         icon: "fire"; shape: "cookie6"; toggleKey: "tube_on"
         ParamSlider { Layout.fillWidth: true; key: "tube_drive"; label: "Drive" }

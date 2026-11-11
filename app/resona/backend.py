@@ -946,6 +946,34 @@ class Backend(QObject):
         self._apply(presets.profile_params(name, self.deviceMode))
         self.stateChanged.emit()
 
+    # ------------------------------------------------------------------ per-effect reset
+    _NOT_PROFILE_KEYS = ("corr_on", "corr_preamp")   # belong to the loaded correction, not the profile
+
+    def _profile_reference(self) -> dict:
+        ref = dict(presets.DEFAULTS)
+        ref.update(presets.profile_params(self.profile, self.deviceMode))
+        return ref
+
+    @Property("QVariantMap", notify=stateChanged)
+    def profileParams(self):
+        """What the current profile + listening device set each parameter to."""
+        return self._profile_reference()
+
+    @Slot(list)
+    def resetEffect(self, keys: list):
+        """Put one effect's settings back to how the current profile tunes them."""
+        ref = self._profile_reference()
+        values = {k: ref[k] for k in keys
+                  if k in ref and k in presets.SOUND_KEYS and k not in self._NOT_PROFILE_KEYS}
+        if not values:
+            return
+        self._apply(values)
+        if self._state.get("modified") and all(
+                abs(float(self._params.get(k, 0)) - float(ref.get(k, 0))) < 1e-4
+                for k in presets.SOUND_KEYS if k not in self._NOT_PROFILE_KEYS):
+            self._state["modified"] = False
+            self.stateChanged.emit()
+
     @Slot(str)
     def setDeviceMode(self, mode: str):
         self._state["device"] = mode

@@ -158,6 +158,45 @@ class CorrectionTests(unittest.TestCase):
         controller.shm.write.assert_called_with({"corr_on": 1})
 
 
+class EffectResetTests(unittest.TestCase):
+    def controller(self, profile="Movie", device="headphones"):
+        ref = dict(presets.DEFAULTS)
+        ref.update(presets.profile_params(profile, device))
+        params = dict(ref)
+        c = SimpleNamespace(_state={"profile": profile, "device": device, "modified": False}, _params=params,
+                            profile=profile, deviceMode=device, _NOT_PROFILE_KEYS=Backend._NOT_PROFILE_KEYS,
+                            stateChanged=SimpleNamespace(emit=Mock()), applied=[])
+        c._apply = lambda values: (c.applied.append(dict(values)), params.update(values))
+        c._profile_reference = MethodType(Backend._profile_reference, c)
+        return c, ref
+
+    def test_reset_restores_only_that_effect_to_the_profile(self):
+        c, ref = self.controller()
+        c._params.update(bass_type=3, bass_amt=0.05, bass_punch=1.0, clar_amt=0.9)
+        c._state["modified"] = True
+        Backend.resetEffect(c, ["bass_on", "bass_type", "bass_amt", "bass_punch", "bass_freq"])
+        for k in ("bass_type", "bass_amt", "bass_punch", "bass_freq"):
+            self.assertEqual(c._params[k], ref[k])
+        self.assertEqual(c._params["clar_amt"], 0.9)          # other effects untouched
+        self.assertTrue(c._state["modified"])                  # clarity is still customised
+
+    def test_resetting_the_last_change_clears_modified(self):
+        c, ref = self.controller("Gaming", "laptop")
+        c._params["stage_width"] = 0.4
+        c._state["modified"] = True
+        Backend.resetEffect(c, ["stage_on", "stage_width", "stage_depth"])
+        self.assertEqual(c._params["stage_width"], ref["stage_width"])
+        self.assertFalse(c._state["modified"])
+        c.stateChanged.emit.assert_called()
+
+    def test_correction_and_unknown_keys_are_never_reset_from_the_profile(self):
+        c, _ = self.controller()
+        c._params.update(corr_on=1, corr_preamp=-6.5)
+        Backend.resetEffect(c, ["corr_on", "corr_preamp", "not_a_param", "sysvol_db"])
+        self.assertEqual(c.applied, [])
+        self.assertEqual(c._params["corr_preamp"], -6.5)
+
+
 class AppearanceTests(unittest.TestCase):
     def test_reduced_motion_is_saved_and_notified(self):
         controller = SimpleNamespace(_state={}, stateChanged=SimpleNamespace(emit=Mock()), _touch=Mock())
