@@ -1,6 +1,7 @@
 """Offline controller regressions; no audio server or GUI is started."""
 import sys
 import json
+import subprocess
 import threading
 import tempfile
 import unittest
@@ -301,6 +302,48 @@ class ShutdownTests(unittest.TestCase):
         with patch("resona.backend.threading.Thread") as worker:
             self.backend._async(Mock(), Mock())
         worker.assert_not_called()
+
+
+class CaptureFailureTests(unittest.TestCase):
+    def setUp(self):
+        self.controller = SimpleNamespace(
+            _running=True, _busy=False, _state={"capture_all": True}, _captured=set(),
+            pipe=SimpleNamespace(target="physical", out_name="resona_output", sink_name="resona_sink"),
+            toast=SimpleNamespace(emit=Mock()),
+        )
+        self.inputs = [dict(index=index, sink=1, properties={"application.name": name})
+                       for index, name in ((10, "First"), (11, "Second"))]
+        patcher = patch("resona.backend.pipeline._run", return_value=json.dumps([dict(name="physical", index=1)]))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_move_errors_do_not_block_other_streams_or_later_retries(self):
+        for error in (OSError("pactl unavailable"), subprocess.TimeoutExpired("pactl", 3)):
+            with self.subTest(error=error):
+                self.controller._captured.clear()
+                self.controller.toast.emit.reset_mock()
+                with patch("resona.backend.subprocess.run", side_effect=[error, subprocess.CompletedProcess([], 0)]) as move:
+                    Backend._capture_bypass(self.controller, self.inputs)
+                self.assertEqual(move.call_count, 2)
+                self.assertEqual(self.controller._captured, {"Second"})
+                self.controller.toast.emit.assert_called_once_with(
+                    "Second was bypassing Resona. Routed it through, volume keys work now")
+                with patch("resona.backend.subprocess.run", return_value=subprocess.CompletedProcess([], 0)):
+                    Backend._capture_bypass(self.controller, self.inputs[:1])
+                self.assertEqual(self.controller._captured, {"First", "Second"})
+
+    def test_rejected_move_does_not_claim_success(self):
+        with patch("resona.backend.subprocess.run", return_value=subprocess.CompletedProcess([], 1)):
+            Backend._capture_bypass(self.controller, self.inputs)
+        self.assertEqual(self.controller._captured, set())
+        self.controller.toast.emit.assert_not_called()
+
+    def test_engine_and_opted_out_streams_are_not_moved(self):
+        inputs = [dict(index=index, sink=1, properties=properties) for index, properties in (
+            (10, {"node.name": "resona_output"}), (11, {"node.dont-move": "true"}))]
+        with patch("resona.backend.subprocess.run") as move:
+            Backend._capture_bypass(self.controller, inputs)
+        move.assert_not_called()
 
 
 class WatchdogTests(unittest.TestCase):

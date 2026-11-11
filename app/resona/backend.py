@@ -450,8 +450,11 @@ class Backend(QObject):
                 continue  # our own engine output
             if p.get("node.dont-move") == "true":
                 continue
-            r = subprocess.run(["pactl", "move-sink-input", str(si["index"]), self.pipe.sink_name],
-                               capture_output=True, timeout=3)
+            try:
+                r = subprocess.run(["pactl", "move-sink-input", str(si["index"]), self.pipe.sink_name],
+                                   capture_output=True, timeout=3)
+            except (OSError, subprocess.TimeoutExpired):
+                continue
             if r.returncode == 0:
                 moved.append(p.get("application.name") or p.get("application.process.binary") or "An app")
         for name in dict.fromkeys(moved):

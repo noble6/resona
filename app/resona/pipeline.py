@@ -98,8 +98,12 @@ def default_sink() -> str:
     return _run("pactl", "get-default-sink").strip()
 
 
-def set_default_sink(name: str) -> None:
-    _run("pactl", "set-default-sink", name)
+def set_default_sink(name: str) -> bool:
+    try:
+        result = subprocess.run(["pactl", "set-default-sink", name], capture_output=True, timeout=3)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
 
 
 def sink_exists(name: str) -> bool:
@@ -277,9 +281,10 @@ class Pipeline:
                 return False
             if make_default:
                 cur = default_sink()
+                if not set_default_sink(self.sink_name):
+                    return False
                 if cur and cur != self.sink_name:
                     self.previous_default = cur
-                set_default_sink(self.sink_name)
             return True
 
     def start(self, target: str | None, make_default: bool = True, timeout: float = 4.0) -> bool:
