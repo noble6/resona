@@ -303,6 +303,32 @@ class ShutdownTests(unittest.TestCase):
             self.backend._async(Mock(), Mock())
         worker.assert_not_called()
 
+    def test_worker_scheduling_errors_are_delivered_to_the_callback(self):
+        for phase in ("create", "start"):
+            with self.subTest(phase=phase), patch("resona.backend.threading.Thread") as worker:
+                error = RuntimeError("cannot start worker")
+                if phase == "create":
+                    worker.side_effect = error
+                else:
+                    worker.return_value.start.side_effect = error
+                work, done = Mock(), Mock()
+                self.backend._async(work, done)
+                work.assert_not_called()
+                done.assert_called_once_with(error)
+
+    def test_worker_scheduling_failure_does_not_leave_updates_checking(self):
+        with patch("resona.backend.threading.Thread", side_effect=RuntimeError("cannot start worker")):
+            self.backend.checkUpdates()
+        self.assertEqual(self.backend.updateInfo["state"], "error")
+        self.assertIn("cannot start worker", self.backend.updateInfo["message"])
+        self.assertNotIn("update_last", self.backend._state)
+
+    def test_worker_scheduling_failure_does_not_leave_auto_eq_searching(self):
+        with patch("resona.backend.threading.Thread", side_effect=RuntimeError("cannot start worker")):
+            self.backend.searchAutoEq("test")
+        self.assertFalse(self.backend.searching)
+        self.assertIsNone(self.backend._aeq_index)
+
 
 class CaptureFailureTests(unittest.TestCase):
     def setUp(self):

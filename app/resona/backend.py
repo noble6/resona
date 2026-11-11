@@ -147,7 +147,10 @@ class Backend(QObject):
             except Exception as e:  # noqa: BLE001
                 res = e
             self._call.emit(done, res)
-        threading.Thread(target=work, daemon=True).start()
+        try:
+            threading.Thread(target=work, daemon=True).start()
+        except Exception as e:  # noqa: BLE001
+            self._call.emit(done, e)
 
     def _load(self) -> dict:
         return persistence.load_state()
