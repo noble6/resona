@@ -390,24 +390,34 @@ class Backend(QObject):
         if self._closing:
             return
         out = pipeline._run("pactl", "-f", "json", "list", "sink-inputs")
+        if not out:
+            return
         try:
-            inputs = json.loads(out or "[]")
+            inputs = json.loads(out)
         except json.JSONDecodeError:
+            return
+        if not isinstance(inputs, list) or any(
+                not isinstance(si, dict) or not isinstance(si.get("properties", {}), dict) for si in inputs):
             return
         self._capture_bypass(inputs)
         rules = self._state.get("app_rules", {})
-        apps, seen = [], set()
+        apps, seen = [], {}
         for si in inputs:
             p = si.get("properties", {})
             binary = (p.get("application.process.binary") or "").lower()
             name = p.get("application.name") or binary
             if not binary or binary.startswith("resona") or p.get("node.name", "").startswith("resona") \
-                    or "pipewire" in binary or binary in seen:
+                    or "pipewire" in binary:
                 continue
-            seen.add(binary)
+            corked = bool(si.get("corked"))
+            if binary in seen:
+                # The app is idle only when every stream is corked.
+                seen[binary]["corked"] = seen[binary]["corked"] and corked
+                continue
             key = binary if binary in rules else (name or "").lower()
-            apps.append({"binary": binary, "name": name, "profile": rules.get(key, ""),
-                         "corked": bool(si.get("corked"))})
+            app = {"binary": binary, "name": name, "profile": rules.get(key, ""), "corked": corked}
+            seen[binary] = app
+            apps.append(app)
         if apps != self._apps:
             self._apps = apps
             self.appsChanged.emit()

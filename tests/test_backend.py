@@ -471,6 +471,79 @@ class AppProfileTests(unittest.TestCase):
         self.assertEqual(self.backend.profile, "Music")
         self.assertEqual(self.backend.autoApp, "player")
 
+    def stream(self, corked, binary="player"):
+        return {"properties": {"application.process.binary": binary, "application.name": "Client"},
+                "corked": corked}
+
+    def scan_streams(self, streams):
+        with patch("resona.backend.pipeline._run", return_value=json.dumps(streams)):
+            self.backend._scan_apps()
+
+    def test_any_playing_stream_keeps_the_app_active_in_either_order(self):
+        for flags in ((True, False), (False, True)):
+            with self.subTest(flags=flags):
+                self.scan_streams([self.stream(flag) for flag in flags])
+                self.assertEqual(len(self.backend.apps), 1)
+                self.assertFalse(self.backend.apps[0]["corked"])
+                self.assertEqual(self.backend.autoApp, "player")
+                self.assertEqual(self.backend.profile, "Music")
+
+    def test_all_idle_streams_leave_the_base_profile_active(self):
+        self.scan_streams([self.stream(True), self.stream(True)])
+        self.assertEqual(len(self.backend.apps), 1)
+        self.assertTrue(self.backend.apps[0]["corked"])
+        self.assertEqual(self.backend.profile, "Dynamic")
+        self.assertIsNone(self.backend._auto_base)
+
+    def test_activity_is_merged_without_enabling_disabled_auto_profiles(self):
+        self.backend._state["app_auto"] = False
+        self.scan_streams([self.stream(True), self.stream(False)])
+        self.assertFalse(self.backend.apps[0]["corked"])
+        self.assertEqual(self.backend.profile, "Dynamic")
+        self.assertIsNone(self.backend._auto_base)
+
+    def test_group_activity_changes_notify_and_restore_the_base(self):
+        changed = Mock()
+        self.backend.appsChanged.connect(changed)
+        self.scan_streams([self.stream(True), self.stream(True)])
+        self.scan_streams([self.stream(True), self.stream(False)])
+        self.assertEqual(self.backend.profile, "Music")
+        self.scan_streams([self.stream(True), self.stream(True)])
+        self.assertEqual(self.backend.profile, "Dynamic")
+        self.assertEqual(changed.call_count, 3)
+
+    def test_distinct_binaries_with_the_same_name_are_not_merged(self):
+        self.backend._state["app_rules"]["game"] = "Gaming"
+        self.scan_streams([self.stream(False), self.stream(False, binary="game")])
+        self.assertEqual([app["binary"] for app in self.backend.apps], ["player", "game"])
+        self.assertEqual(self.backend.profile, "Gaming")
+
+    def test_missing_corked_flag_counts_as_playing(self):
+        playing = self.stream(False)
+        playing.pop("corked")
+        self.scan_streams([self.stream(True), playing])
+        self.assertFalse(self.backend.apps[0]["corked"])
+        self.assertEqual(self.backend.profile, "Music")
+
+    def test_failed_or_invalid_queries_do_not_discard_last_known_activity(self):
+        for response in ("", "invalid", "null", "{}", '["invalid"]', '[{"properties": null}]'):
+            with self.subTest(response=response):
+                self.scan_streams([self.stream(False)])
+                base = self.backend._auto_base
+                apps = list(self.backend.apps)
+                with patch("resona.backend.pipeline._run", return_value=response):
+                    self.backend._scan_apps()
+                self.assertEqual(self.backend.profile, "Music")
+                self.assertEqual(self.backend.apps, apps)
+                self.assertIs(self.backend._auto_base, base)
+
+    def test_valid_empty_query_still_restores_the_base(self):
+        self.scan_streams([self.stream(False)])
+        self.scan_streams([])
+        self.assertEqual(self.backend.profile, "Dynamic")
+        self.assertEqual(self.backend.apps, [])
+        self.assertEqual(self.backend.autoApp, "")
+
 
 class HardwareSettingTests(unittest.TestCase):
     def controller(self):
