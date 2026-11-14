@@ -40,9 +40,10 @@ def _command(*args: str, timeout: float = 4.0) -> bool:
 
 def _json(*args: str):
     try:
-        return json.loads(_run(*args) or "[]")
+        data = json.loads(_run(*args) or "[]")
     except json.JSONDecodeError:
         return []
+    return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
 
 
 # ---------------------------------------------------------------- channel layouts
@@ -140,8 +141,17 @@ def _usb_rates(card_index: str) -> list[int]:
         except OSError:
             continue
         play = txt.split("Capture:")[0]
-        for m in re.finditer(r"Rates:\s*([\d, ]+)", play):
-            rates.update(int(r) for r in m.group(1).replace(" ", "").split(",") if r)
+        for m in re.finditer(r"Rates:[ \t]*([^\r\n]*)", play):
+            value = m.group(1).strip()
+            interval = re.fullmatch(r"(\d+)\s*-\s*(\d+)\s*(?:\(continuous\))?", value)
+            if interval:
+                low, high = map(int, interval.groups())
+                if 0 < low <= high:
+                    # Continuous ranges expose standard rates and their endpoints.
+                    rates.update((low, high))
+                    rates.update(rate for rate in STANDARD_RATES + [32000] if low <= rate <= high)
+            elif re.fullmatch(r"\d+(?:\s*,\s*\d+)*", value):
+                rates.update(rate for rate in map(int, value.split(",")) if rate > 0)
     return sorted(rates)
 
 
@@ -255,11 +265,8 @@ def set_profile(card: str, profile: str) -> bool:
 
 # ---------------------------------------------------------------- Bluetooth codecs
 def bt_codecs(card: str) -> list[str]:
-    out = _run("pactl", "send-message", f"/card/{card}/bluez", "list-codecs")
-    try:
-        return [c.get("name", "") for c in json.loads(out) if c.get("name")]
-    except (json.JSONDecodeError, AttributeError):
-        return []
+    codecs = _json("pactl", "send-message", f"/card/{card}/bluez", "list-codecs")
+    return [codec["name"] for codec in codecs if isinstance(codec.get("name"), str) and codec["name"]]
 
 
 def bt_switch_codec(card: str, codec: str) -> bool:

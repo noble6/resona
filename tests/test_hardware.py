@@ -1,4 +1,5 @@
 """Hardware setting failures use temporary configuration files and mocked commands."""
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -239,6 +240,68 @@ class DiscoveryTests(unittest.TestCase):
         cards = [{"name": "card", "profiles": {name: {"available": value} for name, value in values.items()}}]
         profiles = {profile["name"]: profile["available"] for profile in self.scan(cards, [])[0]["profiles"]}
         self.assertEqual(profiles, {"yes": True, "no": False, "unknown": True, "true": True, "false": False})
+
+
+class MetadataTests(unittest.TestCase):
+    def test_non_list_json_and_invalid_json_return_an_empty_list(self):
+        for content in ("null", "{}", '"text"', "42", "invalid"):
+            with self.subTest(content=content), patch.object(hardware, "_run", return_value=content):
+                self.assertEqual(hardware._json("unused"), [])
+
+    def test_non_object_entries_do_not_discard_valid_objects(self):
+        valid = {"name": "output"}
+        with patch.object(hardware, "_run", return_value=json.dumps([None, 7, "invalid", valid])):
+            self.assertEqual(hardware._json("unused"), [valid])
+
+    def test_invalid_codec_responses_return_an_empty_list(self):
+        for content in ("null", "{}", "42", "invalid"):
+            with self.subTest(content=content), patch.object(hardware, "_run", return_value=content):
+                self.assertEqual(hardware.bt_codecs("test-card"), [])
+
+    def test_valid_codec_names_survive_invalid_entries(self):
+        codecs = [{"name": "sbc"}, None, {"name": 7}, {"name": ""}, {"name": "ldac"}]
+        with patch.object(hardware, "_run", return_value=json.dumps(codecs)):
+            self.assertEqual(hardware.bt_codecs("test-card"), ["sbc", "ldac"])
+
+
+class UsbRateTests(unittest.TestCase):
+    def rates(self, text):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "stream0").write_text(text)
+            with patch.object(hardware, "Path", return_value=root):
+                return hardware._usb_rates("0")
+
+    def test_discrete_playback_rates_do_not_include_capture_rates(self):
+        self.assertEqual(self.rates("Playback:\nRates: 44100, 48000, 96000\nCapture:\nRates: 192000\n"),
+                         [44100, 48000, 96000])
+
+    def test_continuous_range_exposes_supported_standard_rates(self):
+        self.assertEqual(self.rates("Playback:\nRates: 44100 - 192000 (continuous)\n"),
+                         [44100, 48000, 88200, 96000, 176400, 192000])
+
+    def test_continuous_range_retains_nonstandard_endpoints(self):
+        self.assertEqual(self.rates("Playback:\nRates: 22050 - 96000 (continuous)\n"),
+                         [22050, 32000, 44100, 48000, 88200, 96000])
+
+    def test_invalid_ranges_and_zero_rates_are_ignored(self):
+        self.assertEqual(self.rates("Playback:\nRates: 96000 - 44100 (continuous)\nRates: 0, 48000, 48000\n"),
+                         [48000])
+
+    def test_usb_fallback_exposes_hires_capability_to_discovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "stream0").write_text("Playback:\nRates: 44100 - 192000 (continuous)\n")
+            cards = [{"index": 1, "name": "usb-card", "properties": {"alsa.card": "1", "device.bus": "usb"}}]
+            sinks = [{"name": "usb-output", "card": 1, "properties": {"alsa.card": "1"}}]
+            with patch.object(hardware, "Path", return_value=root), \
+                    patch.object(hardware, "_json", side_effect=[cards, sinks, []]), \
+                    patch.object(hardware, "_codec_name", return_value=""), \
+                    patch.object(hardware, "_dac_bits", return_value=24), \
+                    patch.object(hardware, "displays", return_value=[]):
+                sink = hardware.scan()[0]["sinks"][0]
+        self.assertEqual(sink["maxRate"], 192000)
+        self.assertTrue(sink["hires"])
 
 
 class CommandTests(unittest.TestCase):
