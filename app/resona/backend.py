@@ -566,15 +566,24 @@ class Backend(QObject):
     @Slot(bool)
     def setHiRes(self, on: bool):
         max_rate = max([s["maxRate"] for c in self._hw for s in c["sinks"] if s["name"] == self.output] or [192000])
-        rates = hardware.set_hires(on, max_rate)
-        self.toast.emit(f"Hi-Res on: native {', '.join(f'{r/1000:g}' for r in rates)} kHz, no resampling"
-                        if on else "Hi-Res off: everything runs at 48 kHz")
+        try:
+            rates = hardware.set_hires(on, max_rate)
+        except (OSError, RuntimeError) as e:
+            self.toast.emit(f"Hi-Res change failed: {e}")
+        else:
+            self.toast.emit(f"Hi-Res on: native {', '.join(f'{r/1000:g}' for r in rates)} kHz, no resampling"
+                            if on else "Hi-Res off: everything runs at 48 kHz")
+        self.hardwareChanged.emit()
         self._hw_timer.start()
 
     @Slot(bool)
     def setHqResampler(self, on: bool):
-        hardware.set_hq_resampler(on)
-        self.toast.emit("Studio-grade resampling applies after an audio restart")
+        try:
+            hardware.set_hq_resampler(on)
+        except (OSError, RuntimeError) as e:
+            self.toast.emit(f"Resampler change failed: {e}")
+        else:
+            self.toast.emit("Studio-grade resampling applies after an audio restart")
         self.hardwareChanged.emit()
 
     @Slot()

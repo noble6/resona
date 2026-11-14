@@ -64,7 +64,7 @@ def main():
                           RESONA_SINK_NAME="resona_lifecycle_sink", RESONA_SCREENSHOT=str(root / "shots"))
         os.environ.pop("RESONA_TEST_TARGET", None)
         sys.path.insert(0, str(ROOT / "app"))
-        from resona import pipeline
+        from resona import hardware, pipeline
         from resona.backend import Backend
 
         app = QApplication.instance() or QApplication([])
@@ -105,6 +105,29 @@ def main():
 
         try:
             ready(original)
+            assert hardware.HIRES_CONF.is_relative_to(root), "hardware settings are not private"
+            assert all(path.is_relative_to(root) for path in hardware.RESAMPLE_CONFS)
+            assert hardware.set_hires(True, 96000) == [44100, 48000, 88200, 96000]
+            pump(0.2)
+            command("pactl", "info")
+            print("  ok   private Hi-Res enable", flush=True)
+            assert hardware.hires_enabled()
+            assert "96000" in hardware.clock_settings().get("allowed-rates", "")
+            assert hardware.set_hires(False) == []
+            pump(0.2)
+            command("pactl", "info")
+            print("  ok   private Hi-Res disable", flush=True)
+            assert not hardware.hires_enabled()
+            hardware.set_hq_resampler(True)
+            assert hardware.hq_resampler_enabled()
+            hardware.set_hq_resampler(False)
+            assert not hardware.hq_resampler_enabled()
+            assert not hardware.set_profile("ci_missing_card", "missing-profile")
+            pump(0.2)
+            command("pactl", "info")
+            print("  ok   private profile rejection", flush=True)
+            assert not hardware.bt_switch_codec("ci_missing_card", "missing-codec")
+            print("  ok   private hardware settings and rejected commands", flush=True)
             check_audio()
             wait_ready = backend.pipe.wait_ready
             with patch.object(backend.pipe, "wait_ready",

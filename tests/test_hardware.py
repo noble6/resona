@@ -1,8 +1,10 @@
 """Hardware setting failures use temporary configuration files and mocked commands."""
 import os
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -24,6 +26,9 @@ class ConfigTests(unittest.TestCase):
         commands = patch.object(hardware, "_run", return_value="")
         commands.start()
         self.addCleanup(commands.stop)
+        checked = patch.object(hardware, "_command", return_value=True, create=True)
+        self.commands = checked.start()
+        self.addCleanup(checked.stop)
 
     def save(self, path, content):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -61,7 +66,32 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 hardware.set_hires(True)
         self.assertEqual(self.hires.read_bytes(), b"previous configuration\n")
+        self.commands.assert_not_called()
         self.assert_no_staging()
+
+    def test_failed_live_hires_change_restores_saved_settings(self):
+        for on in (False, True):
+            for existing in (False, True):
+                with self.subTest(on=on, existing=existing):
+                    if existing:
+                        self.save(self.hires, b"old rates\n")
+                    else:
+                        self.hires.unlink(missing_ok=True)
+                    self.commands.return_value = False
+                    with self.assertRaisesRegex(RuntimeError, "Hi-Res"):
+                        hardware.set_hires(on)
+                    self.assertEqual(self.hires.read_bytes() if self.hires.exists() else None,
+                                     b"old rates\n" if existing else None)
+                    self.assert_no_staging()
+
+    def test_live_hires_command_keeps_existing_arguments(self):
+        hardware.set_hires(True, 48000)
+        self.commands.assert_called_once_with("pw-metadata", "-n", "settings", "0",
+                                               "clock.allowed-rates", "[ 44100 48000 ]")
+
+    def test_disabling_hires_sets_a_safe_default_rate(self):
+        hardware.set_hires(False)
+        self.commands.assert_called_once_with("pw-metadata", "-n", "settings", "0", "clock.allowed-rates", "[ 48000 ]")
 
     def test_resampler_round_trip_updates_both_files(self):
         hardware.set_hq_resampler(True)
@@ -173,6 +203,38 @@ class ConfigTests(unittest.TestCase):
         backups = list(self.root.rglob(".resona-config-*/old"))
         self.assertTrue(any(path.read_bytes() == b"old first\n" for path in backups))
         self.assertEqual(second.read_bytes(), b"old second\n")
+
+
+class CommandTests(unittest.TestCase):
+    def test_stalled_process_is_stopped_at_the_deadline(self):
+        started = time.monotonic()
+        self.assertFalse(hardware._command(sys.executable, "-I", "-c", "import time; time.sleep(30)", timeout=0.1))
+        self.assertLess(time.monotonic() - started, 3)
+
+    def test_profile_command_has_a_deadline(self):
+        with patch.object(hardware.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
+            self.assertTrue(hardware.set_profile("card", "profile"))
+        run.assert_called_once_with(["pactl", "set-card-profile", "card", "profile"],
+                                    capture_output=True, timeout=4.0)
+
+    def test_codec_command_has_a_deadline_and_keeps_json_argument(self):
+        with patch.object(hardware.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
+            self.assertTrue(hardware.bt_switch_codec("card", "codec"))
+        run.assert_called_once_with(["pactl", "send-message", "/card/card/bluez", "switch-codec", '"codec"'],
+                                    capture_output=True, timeout=4.0)
+
+    def test_command_errors_return_failure(self):
+        for method, arguments in ((hardware.set_profile, ("card", "profile")),
+                                  (hardware.bt_switch_codec, ("card", "codec"))):
+            for error in (OSError("missing command"), subprocess.TimeoutExpired("pactl", 4)):
+                with self.subTest(method=method.__name__, error=error), \
+                        patch.object(hardware.subprocess, "run", side_effect=error):
+                    self.assertFalse(method(*arguments))
+
+    def test_rejected_commands_return_failure(self):
+        with patch.object(hardware.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)):
+            self.assertFalse(hardware.set_profile("card", "profile"))
+            self.assertFalse(hardware.bt_switch_codec("card", "codec"))
 
 
 if __name__ == "__main__":

@@ -369,6 +369,49 @@ class ShutdownTests(unittest.TestCase):
         self.assertIsNone(self.backend._aeq_index)
 
 
+class HardwareSettingTests(unittest.TestCase):
+    def controller(self):
+        return SimpleNamespace(
+            _hw=[], output="physical", toast=SimpleNamespace(emit=Mock()),
+            hardwareChanged=SimpleNamespace(emit=Mock()), _hw_timer=SimpleNamespace(start=Mock()),
+        )
+
+    def test_hires_failure_is_reported_without_a_success_message(self):
+        for error in (PermissionError("disk denied"), RuntimeError("PipeWire rejected settings")):
+            with self.subTest(error=error):
+                controller = self.controller()
+                with patch("resona.backend.hardware.set_hires", side_effect=error):
+                    Backend.setHiRes(controller, True)
+                controller.toast.emit.assert_called_once()
+                self.assertIn("failed", controller.toast.emit.call_args.args[0])
+                self.assertNotIn("Hi-Res on:", controller.toast.emit.call_args.args[0])
+                controller.hardwareChanged.emit.assert_called_once_with()
+
+    def test_resampler_failure_is_reported_without_a_success_message(self):
+        controller = self.controller()
+        with patch("resona.backend.hardware.set_hq_resampler", side_effect=PermissionError("disk denied")):
+            Backend.setHqResampler(controller, True)
+        controller.toast.emit.assert_called_once()
+        self.assertIn("failed", controller.toast.emit.call_args.args[0])
+        self.assertNotIn("Studio-grade", controller.toast.emit.call_args.args[0])
+        controller.hardwareChanged.emit.assert_called_once_with()
+
+    def test_successful_hires_change_keeps_existing_message(self):
+        controller = self.controller()
+        with patch("resona.backend.hardware.set_hires", return_value=[44100, 48000]) as apply:
+            Backend.setHiRes(controller, True)
+        apply.assert_called_once_with(True, 192000)
+        controller.toast.emit.assert_called_once_with("Hi-Res on: native 44.1, 48 kHz, no resampling")
+        controller._hw_timer.start.assert_called_once_with()
+
+    def test_successful_resampler_change_keeps_existing_message(self):
+        controller = self.controller()
+        with patch("resona.backend.hardware.set_hq_resampler"):
+            Backend.setHqResampler(controller, True)
+        controller.toast.emit.assert_called_once_with("Studio-grade resampling applies after an audio restart")
+        controller.hardwareChanged.emit.assert_called_once_with()
+
+
 class AutoEqRequestTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

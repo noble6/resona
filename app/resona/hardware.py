@@ -3,6 +3,7 @@ HDMI / S/PDIF optical / AC3), sample-rate & bit-depth capabilities, Bluetooth co
 and Hi-Res mode (PipeWire clock rates + resampler quality)."""
 from __future__ import annotations
 
+from collections.abc import Callable
 import json
 import os
 import re
@@ -28,6 +29,13 @@ def _run(*args: str, timeout: float = 4.0) -> str:
         return subprocess.run(args, capture_output=True, text=True, timeout=timeout).stdout
     except (OSError, subprocess.TimeoutExpired):
         return ""
+
+
+def _command(*args: str, timeout: float = 4.0) -> bool:
+    try:
+        return subprocess.run(list(args), capture_output=True, timeout=timeout).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def _json(*args: str):
@@ -238,7 +246,7 @@ def scan() -> list[dict]:
 
 
 def set_profile(card: str, profile: str) -> bool:
-    return subprocess.run(["pactl", "set-card-profile", card, profile], capture_output=True).returncode == 0
+    return _command("pactl", "set-card-profile", card, profile)
 
 
 # ---------------------------------------------------------------- Bluetooth codecs
@@ -251,8 +259,7 @@ def bt_codecs(card: str) -> list[str]:
 
 
 def bt_switch_codec(card: str, codec: str) -> bool:
-    return subprocess.run(["pactl", "send-message", f"/card/{card}/bluez", "switch-codec", json.dumps(codec)],
-                          capture_output=True).returncode == 0
+    return _command("pactl", "send-message", f"/card/{card}/bluez", "switch-codec", json.dumps(codec))
 
 
 # ---------------------------------------------------------------- Hi-Res mode
@@ -272,7 +279,7 @@ def hires_enabled() -> bool:
     return HIRES_CONF.exists()
 
 
-def _configure_files(paths: list[Path], content: bytes | None) -> None:
+def _configure_files(paths: list[Path], content: bytes | None, apply: Callable[[], None] | None = None) -> None:
     """Stage settings before publication and roll back ordinary I/O failures.
 
     This is not a crash-recovery journal. Keep backups if rollback itself fails.
@@ -297,7 +304,9 @@ def _configure_files(paths: list[Path], content: bytes | None) -> None:
             else:
                 os.replace(stage / "new", path)
             changed.append((path, stage, had_old))
-    except OSError as error:
+        if apply is not None:
+            apply()
+    except (OSError, RuntimeError) as error:
         failures = []
         for path, stage, had_old in reversed(changed):
             try:
@@ -323,13 +332,19 @@ def set_hires(on: bool, max_rate: int = 192000) -> list[int]:
     if on:
         rates = hires_rates(max_rate)
         content = ("# written by Resona (Hi-Res mode)\ncontext.properties = {\n"
-                   f"    default.clock.allowed-rates = [ {' '.join(map(str, rates))} ]\n}}\n")
-        _configure_files([HIRES_CONF], content.encode("utf-8"))
-        _run("pw-metadata", "-n", "settings", "0", "clock.allowed-rates", f"[ {' '.join(map(str, rates))} ]")
-        return rates
-    _configure_files([HIRES_CONF], None)
-    _run("pw-metadata", "-n", "settings", "-d", "0", "clock.allowed-rates")
-    return []
+                   f"    default.clock.allowed-rates = [ {' '.join(map(str, rates))} ]\n}}\n").encode("utf-8")
+        command = ("pw-metadata", "-n", "settings", "0", "clock.allowed-rates", f"[ {' '.join(map(str, rates))} ]")
+    else:
+        rates, content = [], None
+        # Deleting clock.allowed-rates can crash PipeWire; set the default explicitly.
+        command = ("pw-metadata", "-n", "settings", "0", "clock.allowed-rates", "[ 48000 ]")
+
+    def apply():
+        if not _command(*command):
+            raise RuntimeError("PipeWire rejected the Hi-Res settings")
+
+    _configure_files([HIRES_CONF], content, apply=apply)
+    return rates
 
 
 def hq_resampler_enabled() -> bool:
