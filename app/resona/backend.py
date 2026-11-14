@@ -158,11 +158,15 @@ class Backend(QObject):
         return persistence.load_state()
 
     def _save(self):
-        self._state["params"] = {k: v for k, v in self._params.items() if k not in ("sysvol_db", "layout")}
+        state = dict(self._state)
+        state["params"] = {k: v for k, v in self._params.items() if k not in ("sysvol_db", "layout")}
         if self._auto_base:  # never persist a temporary per-app profile
-            self._state["params"] = self._auto_base["params"]
+            state["params"].update(self._auto_base["params"])
+            for key in ("profile", "device", "modified", "eq_preset"):
+                if key in self._auto_base:
+                    state[key] = self._auto_base[key]
         try:
-            persistence.save_state(self._state)
+            persistence.save_state(state)
         except (OSError, TypeError, ValueError) as e:
             print("resona: could not save state:", e, file=sys.stderr)
 
@@ -413,12 +417,16 @@ class Backend(QObject):
         if live:
             app = live[-1]
             if app["profile"] != self.profile or self._auto_app != app["binary"]:
+                values = presets.profile_params(app["profile"], self.deviceMode)
                 if not self._auto_base:
                     self._auto_base = self._snapshot()
+                    self._auto_base["params"] = {k: v for k, v in self._auto_base["params"].items() if k in values}
                 self._auto_app = app["binary"]
                 self._state["profile"] = app["profile"]
+                profile = presets.PROFILES.get(app["profile"], presets.PROFILES["Dynamic"])[2]
+                self._state["eq_preset"] = profile.get("eq", "Flat")
                 self._state["modified"] = False
-                self._apply(presets.profile_params(app["profile"], self.deviceMode))
+                self._apply(values)
                 self.stateChanged.emit()
                 self.toast.emit(f"{app['profile']} profile for {app['name']}")
         elif self._auto_base:
@@ -786,6 +794,7 @@ class Backend(QObject):
         if not isinstance(data, dict) or "params" not in data:
             raise ValueError("not a Resona preset")
         data = validation.snapshot(data)
+        self._auto_base, self._auto_app = None, ""
         if data.get("correction"):
             self._set_correction(data["correction"])
         self._restore(data)

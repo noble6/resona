@@ -369,6 +369,109 @@ class ShutdownTests(unittest.TestCase):
         self.assertIsNone(self.backend._aeq_index)
 
 
+class AppProfileTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QCoreApplication.instance() or QCoreApplication([])
+
+    def setUp(self):
+        self.save_backend = Backend._save
+        ShutdownTests.setUp(self)
+        self.backend._anim.stop()
+        self.backend._capture_bypass = Mock()
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.stack.enter_context(patch.object(persistence, "STATE_FILE", self.root / "state.json"))
+        self.stack.enter_context(patch.object(persistence, "PRESET_DIR", self.root / "presets"))
+        self.backend._state.update(profile="Dynamic", device="headphones", eq_preset="Flat",
+                                   modified=True, app_rules={"player": "Music"}, update_freq="monthly")
+        self.backend._params.update(bass_amt=0.31, preamp=-3, output=-1, corr_on=0, corr_preamp=0)
+        self.base = self.backend._snapshot()
+
+    def scan(self, active):
+        inputs = [{"properties": {"application.process.binary": "player", "application.name": "Player"},
+                   "corked": False}] if active else []
+        with patch("resona.backend.pipeline._run", return_value=json.dumps(inputs)):
+            self.backend._scan_apps()
+
+    def change_global_controls(self):
+        for name, value in (("preamp", -8), ("output", -2), ("corr_on", 1), ("corr_preamp", -4), ("enable", 0)):
+            self.backend.setParam(name, value)
+
+    def test_automatic_profile_reports_its_actual_eq_preset(self):
+        self.scan(True)
+        self.assertEqual(self.backend.profile, "Music")
+        self.assertEqual(self.backend.eqPreset, "Warm")
+
+    def test_save_uses_base_metadata_without_changing_live_state(self):
+        self.scan(True)
+        before = dict(self.backend._state)
+        self.save_backend(self.backend)
+        saved = persistence.load_state()
+        for key in ("profile", "device", "modified", "eq_preset"):
+            self.assertEqual(saved[key], self.base[key])
+        self.assertEqual(saved["params"]["bass_amt"], 0.31)
+        self.assertEqual(saved["update_freq"], "monthly")
+        self.assertEqual(self.backend._state, before)
+        self.assertEqual(self.backend.profile, "Music")
+
+    def test_save_keeps_current_global_controls_during_app_override(self):
+        self.scan(True)
+        self.change_global_controls()
+        self.save_backend(self.backend)
+        saved = persistence.load_state()
+        for name in ("preamp", "output", "corr_on", "corr_preamp", "enable"):
+            self.assertEqual(saved["params"][name], self.backend.params[name])
+        self.assertEqual(saved["params"]["bass_amt"], 0.31)
+
+    def test_app_exit_restores_effects_but_keeps_global_controls(self):
+        self.scan(True)
+        self.change_global_controls()
+        self.scan(False)
+        self.assertEqual(self.backend.profile, "Dynamic")
+        self.assertEqual(self.backend.params["bass_amt"], 0.31)
+        self.assertEqual([self.backend.params[name] for name in ("preamp", "output", "corr_on", "corr_preamp", "enable")],
+                         [-8, -2, 1, -4, 0])
+
+    def test_disabling_app_auto_keeps_current_gain(self):
+        self.scan(True)
+        self.backend.setParam("preamp", -8)
+        with patch("resona.backend.pipeline._run", return_value="[]"):
+            self.backend.setAppAuto(False)
+        self.assertEqual(self.backend.params["preamp"], -8)
+        self.assertEqual(self.backend.profile, "Dynamic")
+
+    def test_loaded_preset_is_not_undone_when_the_app_exits(self):
+        self.scan(True)
+        self.backend._load_preset_data({"profile": "Gaming", "params": {"bass_amt": 0.8}}, "Chosen")
+        self.scan(False)
+        self.save_backend(self.backend)
+        self.assertEqual(self.backend.profile, "Gaming")
+        self.assertEqual(persistence.load_state()["params"]["bass_amt"], 0.8)
+        self.assertIsNone(self.backend._auto_base)
+        self.assertEqual(self.backend.autoApp, "")
+
+    def test_imported_preset_replaces_the_old_app_base(self):
+        self.scan(True)
+        source = self.root / "Imported.json"
+        source.write_text(json.dumps({"profile": "Gaming", "params": {"bass_amt": 0.8}}))
+        self.backend.importPreset(str(source))
+        self.scan(False)
+        self.assertEqual(self.backend.profile, "Gaming")
+        self.assertEqual(self.backend.params["bass_amt"], 0.8)
+        self.assertIsNone(self.backend._auto_base)
+
+    def test_invalid_preset_does_not_cancel_the_app_override(self):
+        self.scan(True)
+        base = self.backend._auto_base
+        with self.assertRaises(ValueError):
+            self.backend._load_preset_data({"params": {"bass_amt": 99}}, "Invalid")
+        self.assertIs(self.backend._auto_base, base)
+        self.assertEqual(self.backend.profile, "Music")
+        self.assertEqual(self.backend.autoApp, "player")
+
+
 class HardwareSettingTests(unittest.TestCase):
     def controller(self):
         return SimpleNamespace(
@@ -774,7 +877,9 @@ class PersistenceTests(unittest.TestCase):
         self.controller._auto_base = {"params": {"bass_amt": 0.2}}
         self.params["bass_amt"] = 0.9
         Backend._save(self.controller)
-        self.assertEqual(persistence.load_state()["params"], {"bass_amt": 0.2})
+        expected = {k: v for k, v in self.params.items() if k not in ("sysvol_db", "layout")}
+        expected["bass_amt"] = 0.2
+        self.assertEqual(persistence.load_state()["params"], expected)
         self.assertEqual(self.params["bass_amt"], 0.9)
 
     def test_state_save_failure_logs_without_damaging_previous_state(self):

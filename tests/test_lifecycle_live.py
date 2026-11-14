@@ -1,5 +1,6 @@
 """Silent lifecycle stress test. Refuses to run outside tests/run_pipewire.sh."""
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -64,7 +65,7 @@ def main():
                           RESONA_SINK_NAME="resona_lifecycle_sink", RESONA_SCREENSHOT=str(root / "shots"))
         os.environ.pop("RESONA_TEST_TARGET", None)
         sys.path.insert(0, str(ROOT / "app"))
-        from resona import hardware, pipeline
+        from resona import hardware, persistence, pipeline
         from resona.backend import Backend
 
         app = QApplication.instance() or QApplication([])
@@ -128,6 +129,44 @@ def main():
             print("  ok   private profile rejection", flush=True)
             assert not hardware.bt_switch_codec("ci_missing_card", "missing-codec")
             print("  ok   private hardware settings and rejected commands", flush=True)
+            check_audio()
+            rules, profile, preamp = backend._state["app_rules"], backend.profile, backend.params["preamp"]
+            app_profile = "Music" if profile != "Music" else "Movie"
+            changed_preamp = -9 if preamp != -9 else -8
+            try:
+                backend._state["app_rules"] = dict(rules)
+                path = root / "app-profile.wav"
+                tone(path, 48000, 8)
+                player = play(path)
+
+                def player_binary():
+                    inputs = json.loads(command("pactl", "-f", "json", "list", "sink-inputs"))
+                    for stream in inputs:
+                        properties = stream.get("properties", {})
+                        if str(properties.get("application.process.id")) == str(player.pid):
+                            return properties.get("application.process.binary", "").lower()
+                    return ""
+
+                wait_for(lambda: bool(player_binary()), "live player was not discovered", seconds=3)
+                binary = player_binary()
+                backend.setAppRule(binary, app_profile)
+                wait_for(lambda: backend.autoApp == binary, "live app profile did not activate", seconds=3)
+                assert backend.profile == app_profile
+                backend.setParam("preamp", changed_preamp)
+                assert persistence.STATE_FILE.is_relative_to(root), "state path is not private"
+                backend._save()
+                saved = persistence.load_state()
+                assert saved["profile"] == profile, "temporary app profile leaked into saved state"
+                assert saved["params"]["preamp"] == changed_preamp, "live gain change was not saved"
+                player.terminate()
+                player.wait(timeout=3)
+                wait_for(lambda: backend.autoApp == "", "app profile did not restore after stream exit")
+                assert backend.profile == profile
+                assert backend.params["preamp"] == changed_preamp, "app exit discarded the live gain change"
+                print("  ok   live app profile restores base sound and keeps gain changes", flush=True)
+            finally:
+                backend._state["app_rules"] = rules
+                backend.setParam("preamp", preamp)
             check_audio()
             wait_ready = backend.pipe.wait_ready
             with patch.object(backend.pipe, "wait_ready",
