@@ -6,8 +6,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
+
+from .persistence import atomic_write
 
 CFG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "pipewire"
 HIRES_CONF = CFG / "pipewire.conf.d" / "90-resona-hires.conf"
@@ -268,34 +272,74 @@ def hires_enabled() -> bool:
     return HIRES_CONF.exists()
 
 
+def _configure_files(paths: list[Path], content: bytes | None) -> None:
+    """Stage settings before publication and roll back ordinary I/O failures.
+
+    This is not a crash-recovery journal. Keep backups if rollback itself fails.
+    """
+    staged, changed = [], []
+    keep_backups = False
+    try:
+        for path in paths:
+            had_old = path.exists() or path.is_symlink()
+            if content is None and not had_old:
+                continue
+            path.parent.mkdir(parents=True, exist_ok=True)
+            stage = Path(tempfile.mkdtemp(prefix=".resona-config-", dir=path.parent))
+            staged.append((path, stage, had_old))
+            if had_old:
+                shutil.copy2(path, stage / "old", follow_symlinks=False)
+            if content is not None:
+                atomic_write(stage / "new", content)
+        for path, stage, had_old in staged:
+            if content is None:
+                path.unlink()
+            else:
+                os.replace(stage / "new", path)
+            changed.append((path, stage, had_old))
+    except OSError as error:
+        failures = []
+        for path, stage, had_old in reversed(changed):
+            try:
+                if had_old:
+                    os.replace(stage / "old", path)
+                else:
+                    path.unlink(missing_ok=True)
+            except OSError:
+                failures.append(str(stage))
+        if failures:
+            keep_backups = True
+            raise OSError("Could not restore hardware settings; backups retained in " + ", ".join(failures)) from error
+        raise
+    finally:
+        if not keep_backups:
+            for _, stage, _ in staged:
+                shutil.rmtree(stage, ignore_errors=True)
+
+
 def set_hires(on: bool, max_rate: int = 192000) -> list[int]:
     """Let PipeWire follow each stream's native rate (44.1 / 88.2 / 96 / 192 kHz …) instead
     of resampling everything to 48 kHz. Applied live and persisted for next login."""
     if on:
         rates = hires_rates(max_rate)
-        HIRES_CONF.parent.mkdir(parents=True, exist_ok=True)
-        HIRES_CONF.write_text("# written by Resona (Hi-Res mode)\ncontext.properties = {\n"
-                              f"    default.clock.allowed-rates = [ {' '.join(map(str, rates))} ]\n}}\n")
+        content = ("# written by Resona (Hi-Res mode)\ncontext.properties = {\n"
+                   f"    default.clock.allowed-rates = [ {' '.join(map(str, rates))} ]\n}}\n")
+        _configure_files([HIRES_CONF], content.encode("utf-8"))
         _run("pw-metadata", "-n", "settings", "0", "clock.allowed-rates", f"[ {' '.join(map(str, rates))} ]")
         return rates
-    if HIRES_CONF.exists():
-        HIRES_CONF.unlink()
+    _configure_files([HIRES_CONF], None)
     _run("pw-metadata", "-n", "settings", "-d", "0", "clock.allowed-rates")
     return []
 
 
 def hq_resampler_enabled() -> bool:
-    return RESAMPLE_CONFS[0].exists()
+    return all(path.is_file() for path in RESAMPLE_CONFS)
 
 
 def set_hq_resampler(on: bool) -> None:
     """Highest-quality SRC for every app stream (takes effect for streams opened after an audio restart)."""
-    for f in RESAMPLE_CONFS:
-        if on:
-            f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_text("# written by Resona\nstream.properties = {\n    resample.quality = 14\n}\n")
-        elif f.exists():
-            f.unlink()
+    content = b"# written by Resona\nstream.properties = {\n    resample.quality = 14\n}\n" if on else None
+    _configure_files(RESAMPLE_CONFS, content)
 
 
 def restart_audio() -> None:

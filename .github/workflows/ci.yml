@@ -72,6 +72,7 @@ jobs:
           python tests/test_install.py
           python tests/test_backend.py
           python tests/test_pipeline.py
+          python tests/test_hardware.py
           python tests/test_pipewire_fixture.py
           python tests/test_correction.py
           python tests/test_correction_model.py
