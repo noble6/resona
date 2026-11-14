@@ -93,6 +93,8 @@ class Backend(QObject):
         self._hw: list[dict] = []
         self._clock: dict = {}
         self._aeq_index: list[dict] | None = None
+        self._search_query = ""
+        self._correction_request = 0
         self._results: list[dict] = []
         self._searching = False
         self._apps: list[dict] = []
@@ -611,6 +613,7 @@ class Backend(QObject):
         info = validation.correction(info)
         if info is None:
             raise ValueError("empty correction")
+        self._correction_request += 1
         self._state["correction"] = info
         self._apply({"corr_on": 1, "corr_preamp": info.get("preamp", 0)})
         self._push_correction()
@@ -626,6 +629,7 @@ class Backend(QObject):
 
     @Slot(str)
     def searchAutoEq(self, query: str):
+        self._search_query = query
         if self._aeq_index is None:
             if self._searching:
                 return
@@ -639,7 +643,7 @@ class Backend(QObject):
                     self._aeq_index = None
                 else:
                     self._aeq_index = res
-                    self.searchAutoEq(query)
+                    self.searchAutoEq(self._search_query)
                 self.searchChanged.emit()
             self._async(correction.autoeq_index, done)
             return
@@ -662,10 +666,14 @@ class Backend(QObject):
     def applyAutoEq(self, i: int):
         if not 0 <= i < len(self._results):
             return
+        self._correction_request += 1
+        request = self._correction_request
         entry = self._results[i]
         self.toast.emit(f"Fetching {entry['name']}…")
 
         def done(res):
+            if request != self._correction_request:
+                return
             if isinstance(res, Exception):
                 self.toast.emit(f"Download failed: {res}")
                 return
@@ -695,6 +703,7 @@ class Backend(QObject):
 
     @Slot()
     def clearCorrection(self):
+        self._correction_request += 1
         self._state.pop("correction", None)
         self._apply({"corr_on": 0, "corr_preamp": 0})
         self._push_correction()
@@ -906,6 +915,7 @@ class Backend(QObject):
         self._params[name] = value
         self.shm.write({name: value})
         if name == "corr_on":
+            self._correction_request += 1
             self._push_correction()
         if name.startswith("eq"):
             self._recompute_curve()

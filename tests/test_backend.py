@@ -22,7 +22,7 @@ class PresetTests(unittest.TestCase):
     def test_preset_keeps_correction_toggle_and_tuned_preamp(self):
         params = {}
         controller = SimpleNamespace(
-            _state={}, _apply=params.update, _push_correction=Mock(), _touch=Mock(),
+            _state={}, _correction_request=0, _apply=params.update, _push_correction=Mock(), _touch=Mock(),
             stateChanged=SimpleNamespace(emit=Mock()), toast=SimpleNamespace(emit=Mock()),
         )
         controller._restore = MethodType(Backend._restore, controller)
@@ -98,7 +98,7 @@ class CorrectionTests(unittest.TestCase):
 
         params = dict(presets.DEFAULTS, bass_amt=0.8)
         controller = SimpleNamespace(
-            _state={"profile": "Music"}, _params=params, _auto_base=None,
+            _state={"profile": "Music"}, _params=params, _auto_base=None, _correction_request=0,
             _apply=params.update, _push_correction=Mock(), _touch=Mock(),
             shm=SimpleNamespace(sample_rate=48000), toast=SimpleNamespace(emit=Mock()),
         )
@@ -367,6 +367,110 @@ class ShutdownTests(unittest.TestCase):
             self.backend.searchAutoEq("test")
         self.assertFalse(self.backend.searching)
         self.assertIsNone(self.backend._aeq_index)
+
+
+class AutoEqRequestTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QCoreApplication.instance() or QCoreApplication([])
+
+    def setUp(self):
+        ShutdownTests.setUp(self)
+        self.pending = []
+        self.stack.enter_context(patch.object(self.backend, "_async", side_effect=lambda work, done: self.pending.append(done)))
+        self.entries = [dict(name=name, source="Test", path=name) for name in ("First", "Second")]
+        self.backend._results = list(self.entries)
+        self.toast = Mock()
+        self.backend.toast.connect(self.toast)
+
+    def text(self, gain=2):
+        return f"Preamp: -3 dB\nFilter: ON PK Fc 1000 Hz Gain {gain} dB Q 1\n"
+
+    def test_index_load_uses_the_latest_query(self):
+        self.backend.searchAutoEq("First")
+        self.backend.searchAutoEq("Second")
+        self.assertEqual(len(self.pending), 1)
+        self.pending[0](self.entries)
+        self.assertEqual(self.backend.autoEqResults, self.entries[1:])
+        self.assertFalse(self.backend.searching)
+
+    def test_clearing_query_during_index_load_keeps_results_empty(self):
+        self.backend.searchAutoEq("First")
+        self.backend.searchAutoEq("")
+        self.pending[0](self.entries)
+        self.assertEqual(self.backend.autoEqResults, [])
+
+    def test_newer_download_wins_when_responses_arrive_out_of_order(self):
+        self.backend.applyAutoEq(0)
+        self.backend.applyAutoEq(1)
+        self.pending[1](self.text())
+        notices = self.toast.call_count
+        self.pending[0](self.text(4))
+        self.assertEqual(self.backend._state["correction"]["name"], "Second")
+        self.assertEqual(self.toast.call_count, notices)
+
+    def test_reselecting_same_entry_still_ignores_older_response(self):
+        self.backend.applyAutoEq(0)
+        self.backend.applyAutoEq(0)
+        self.pending[1](self.text())
+        self.pending[0](self.text(4))
+        self.assertEqual(self.backend._state["correction"]["filters"][0]["gain"], 2)
+
+    def test_old_download_error_does_not_replace_latest_feedback(self):
+        self.backend.applyAutoEq(0)
+        self.backend.applyAutoEq(1)
+        self.pending[1](self.text())
+        notices = self.toast.call_count
+        self.pending[0](OSError("old download failed"))
+        self.assertEqual(self.toast.call_count, notices)
+        self.assertEqual(self.backend._state["correction"]["name"], "Second")
+
+    def test_clear_cancels_pending_download(self):
+        self.backend.applyAutoEq(0)
+        self.backend.clearCorrection()
+        self.pending[0](self.text())
+        self.assertNotIn("correction", self.backend._state)
+        self.assertEqual(self.backend.params["corr_on"], 0)
+
+    def test_import_cancels_pending_download(self):
+        self.backend.applyAutoEq(0)
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "Imported.txt"
+            source.write_text(self.text(6))
+            self.backend.importCorrection(str(source))
+        self.pending[0](self.text())
+        self.assertEqual(self.backend._state["correction"]["name"], "Imported")
+        self.assertEqual(self.backend._state["correction"]["filters"][0]["gain"], 6)
+
+    def test_preset_cancels_pending_download_and_keeps_disabled_correction(self):
+        self.backend.applyAutoEq(0)
+        self.backend._load_preset_data({"params": {"corr_on": 0}, "correction": {
+            "name": "Preset", "filters": [{"type": "PK", "freq": 1000, "gain": 4}]}}, "Preset")
+        self.pending[0](self.text())
+        self.assertEqual(self.backend._state["correction"]["name"], "Preset")
+        self.assertEqual(self.backend.params["corr_on"], 0)
+
+    def test_off_toggle_cancels_pending_download(self):
+        self.backend._params["corr_on"] = 1
+        self.backend.applyAutoEq(0)
+        self.backend.setParam("corr_on", 0)
+        self.pending[0](self.text())
+        self.assertEqual(self.backend.params["corr_on"], 0)
+        self.assertNotIn("correction", self.backend._state)
+
+    def test_invalid_selection_does_not_cancel_pending_download(self):
+        self.backend.applyAutoEq(0)
+        self.backend.applyAutoEq(-1)
+        self.assertEqual(len(self.pending), 1)
+        self.pending[0](self.text())
+        self.assertEqual(self.backend._state["correction"]["name"], "First")
+
+    def test_failed_import_does_not_cancel_pending_download(self):
+        self.backend.applyAutoEq(0)
+        with tempfile.TemporaryDirectory() as directory:
+            self.backend.importCorrection(str(Path(directory) / "missing.txt"))
+        self.pending[0](self.text())
+        self.assertEqual(self.backend._state["correction"]["name"], "First")
 
 
 class CaptureFailureTests(unittest.TestCase):
