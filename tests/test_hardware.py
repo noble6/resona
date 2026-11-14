@@ -205,6 +205,42 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(second.read_bytes(), b"old second\n")
 
 
+class DiscoveryTests(unittest.TestCase):
+    def scan(self, cards, sinks):
+        with patch.object(hardware, "_json", side_effect=[cards, sinks, []]), \
+                patch.object(hardware, "_codec_name", return_value=""), \
+                patch.object(hardware, "_dac_bits", return_value=24), \
+                patch.object(hardware, "_usb_rates", return_value=[]), \
+                patch.object(hardware, "displays", return_value=[]):
+            return hardware.scan()
+
+    def test_bluetooth_output_is_matched_by_its_card_index_including_zero(self):
+        cards = [{"index": 0, "name": "bluez_card.test", "properties": {"device.bus": "bluetooth"}}]
+        sinks = [{"name": "bluez_output.test", "card": 0, "properties": {}, "channel_map": "front-left,front-right"}]
+        result = self.scan(cards, sinks)
+        self.assertEqual([sink["name"] for sink in result[0]["sinks"]], ["bluez_output.test"])
+        self.assertTrue(result[0]["bluetooth"])
+
+    def test_explicit_card_index_takes_precedence_over_old_properties(self):
+        cards = [{"index": index, "name": f"card-{index}", "properties": {"alsa.card": str(index)}}
+                 for index in (0, 1)]
+        sinks = [{"name": "output", "card": 1, "properties": {"alsa.card": "0"}}]
+        result = self.scan(cards, sinks)
+        self.assertEqual(result[0]["sinks"], [])
+        self.assertEqual([sink["name"] for sink in result[1]["sinks"]], ["output"])
+
+    def test_legacy_card_matching_still_works_without_explicit_indexes(self):
+        cards = [{"name": "legacy-card", "properties": {"alsa.card": "0"}}]
+        sinks = [{"name": "legacy-output", "properties": {"alsa.card": "0"}}]
+        self.assertEqual(self.scan(cards, sinks)[0]["sinks"][0]["name"], "legacy-output")
+
+    def test_unavailable_profile_strings_are_not_treated_as_true(self):
+        values = {"yes": "yes", "no": "no", "unknown": "unknown", "true": True, "false": False}
+        cards = [{"name": "card", "profiles": {name: {"available": value} for name, value in values.items()}}]
+        profiles = {profile["name"]: profile["available"] for profile in self.scan(cards, [])[0]["profiles"]}
+        self.assertEqual(profiles, {"yes": True, "no": False, "unknown": True, "true": True, "false": False})
+
+
 class CommandTests(unittest.TestCase):
     def test_stalled_process_is_stopped_at_the_deadline(self):
         started = time.monotonic()

@@ -199,7 +199,10 @@ def scan() -> list[dict]:
         card_sinks = []
         for s in sinks:
             sp = s.get("properties", {})
-            same = (idx and sp.get("alsa.card") == idx) or sp.get("device.name") == c["name"]
+            if c.get("index") is not None and s.get("card") is not None:
+                same = s["card"] == c["index"]
+            else:
+                same = (idx and sp.get("alsa.card") == idx) or sp.get("device.name") == c["name"]
             if not same or s["name"].startswith("resona"):
                 continue
             cap = caps.get(s["name"], {})
@@ -223,8 +226,9 @@ def scan() -> list[dict]:
         for name, v in c.get("profiles", {}).items():
             if name == "off" or name.startswith("input:"):
                 continue
+            available = v.get("available", True)
             profiles.append({"name": name, "description": v.get("description", name),
-                             "available": bool(v.get("available", True)), "kind": profile_kind(name)})
+                              "available": bool(available) and available != "no", "kind": profile_kind(name)})
         ports = [{"name": n, "description": v.get("description", n), "type": v.get("type", ""),
                   "available": v.get("availability", "") != "not available",
                   "plugged": v.get("availability", "") == "available"}
