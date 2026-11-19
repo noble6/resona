@@ -59,6 +59,37 @@ class CorrectionModelTests(unittest.TestCase):
                 self.assertEqual(info["kind"], kind)
                 self.assertEqual(len(info["filters"]), 1)
 
+    def test_invalid_alternate_ddc_section_is_bypassed_without_mutating_saved_data(self):
+        for section in ("1,0,0,2,0", "1e999,0,0,0,0", "1000001,0,0,0,0"):
+            with self.subTest(section=section), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "Headphone.vdc"
+                path.write_text(f"SR_48000:1,0,0,0,0\nSR_96000:{section}")
+                info = correction_model.from_file(path, 48000)
+                previous = copy.deepcopy(info)
+                frequencies = np.geomspace(20, 20000, 16)
+                with np.errstate(all="raise"):
+                    bypass = correction_model.prepare(info, 96000, frequencies, 1)
+                self.assertEqual(bypass.filters, [])
+                self.assertEqual(bypass.enabled, 0)
+                self.assertEqual(bypass.curve, [0.0] * 16)
+                self.assertTrue(bypass.warning.endswith("; correction bypassed"))
+                restored = correction_model.prepare(info, 48000, frequencies, 1)
+                self.assertEqual(restored.filters, previous["filters"])
+                self.assertEqual(restored.enabled, 1)
+                self.assertEqual(restored.warning, "")
+                self.assertEqual(info, previous)
+
+    def test_valid_alternate_ddc_section_keeps_its_rate_specific_coefficients(self):
+        info = dict(kind="vdc", text="SR_48000:1,0,0,0,0\nSR_96000:0.5,0,0,0,0",
+                    filters=correction.parse_vdc("SR_48000:1,0,0,0,0", 48000), preamp=0)
+        previous = copy.deepcopy(info)
+        result = correction_model.prepare(info, 96000, np.geomspace(20, 20000, 16), 1)
+        self.assertEqual(result.filters, correction.parse_vdc(info["text"], 96000))
+        self.assertEqual(result.curve, [-6.02] * 16)
+        self.assertEqual(result.enabled, 1)
+        self.assertEqual(result.warning, "")
+        self.assertEqual(info, previous)
+
     def test_invalid_import_and_unsupported_ddc_rate_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "profile.txt"

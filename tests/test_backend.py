@@ -157,6 +157,26 @@ class CorrectionTests(unittest.TestCase):
         self.assertEqual(len(controller.shm.write_corr.call_args.args[0]), 1)
         controller.shm.write.assert_called_with({"corr_on": 1})
 
+    def test_invalid_ddc_rate_section_never_reaches_shared_memory(self):
+        for section in ("1,0,0,2,0", "1e999,0,0,0,0"):
+            with self.subTest(section=section):
+                info = {"kind": "vdc", "text": f"SR_48000:1,0,0,0,0\nSR_96000:{section}",
+                        "filters": []}
+                controller = SimpleNamespace(
+                    _state={"correction": info}, _params={"corr_on": 1},
+                    shm=SimpleNamespace(sample_rate=96000, write_corr=Mock(), write=Mock()),
+                    toast=SimpleNamespace(emit=Mock()), correctionChanged=SimpleNamespace(emit=Mock()),
+                )
+                Backend._push_correction(controller)
+                controller.shm.write_corr.assert_called_with([])
+                controller.shm.write.assert_called_with({"corr_on": 0})
+                self.assertEqual(controller._params["corr_on"], 1)
+                self.assertIs(controller._state["correction"], info)
+                controller.shm.sample_rate = 48000
+                Backend._push_correction(controller)
+                self.assertEqual(controller.shm.write_corr.call_args.args[0][0]["b0"], 1)
+                controller.shm.write.assert_called_with({"corr_on": 1})
+
 
 class EffectResetTests(unittest.TestCase):
     def controller(self, profile="Movie", device="headphones"):

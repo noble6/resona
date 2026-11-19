@@ -20,6 +20,7 @@ def prepare(info: dict | None, sample_rate: int, frequencies, enabled: float) ->
     if info.get("kind") == "vdc" and info.get("text"):
         try:
             filters = correction.parse_vdc(info["text"], sample_rate)
+            filters = validation.correction({"filters": filters})["filters"]
         except ValueError as error:
             filters, enabled = [], 0
             warning = f"{error}; correction bypassed"
