@@ -142,6 +142,19 @@ try:
     x = capture_while_playing("resona_it_sink", "resona_it_null.monitor", wav)
     lvl = 20 * np.log10(np.abs(x[len(x)//4: -len(x)//4]).max() + 1e-9)
     check(-20 < lvl < -6, f"audio flows through the convolver ({lvl:.1f} dBFS)")
+
+    # A large float impulse needs a small nonzero gain, including exponent notation.
+    pipe.stop(restore_default=False)
+    ir = np.zeros((n, 4))
+    ir[0, 0] = ir[0, 3] = 1e7
+    write_wav(TMP / "small-gain.irs", ir.reshape(-1), ch=4, float32=True)
+    info = correction.read_ir(str(TMP / "small-gain.irs"))
+    check(info["gain"] > 0, f"small convolver gain stays nonzero ({info['gain']})")
+    ok = fresh(pipe, "resona_it_null", ir=dict(info, mix=1.0))
+    check(ok, f"small-gain convolver graph came up {pipe.last_log().strip()[-300:]!r}")
+    x = capture_while_playing("resona_it_sink", "resona_it_null.monitor", wav)
+    lvl = 20 * np.log10(np.abs(x[len(x)//4: -len(x)//4]).max() + 1e-9)
+    check(-13 < lvl < -11, f"small convolver gain preserves normalized audio ({lvl:.1f} dBFS)")
 finally:
     pipe.stop(restore_default=False)
     for m in mods:

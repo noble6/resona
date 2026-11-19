@@ -139,7 +139,7 @@ def _ir_graph(ir: dict) -> tuple[list[str], list[str], list[str]]:
         convs = [("cvL", 0, "cpL", "mxL"), ("cvR", 1 if ch == 2 else 0, "cpR", "mxR")]
     port = {"mxL": 2, "mxR": 2}
     for name, c, src, dst in convs:
-        nodes.append(f'{{ type = builtin label = convolver name = {name} config = {{ filename = {f} channel = {c} gain = {g:.6f} }} }}')
+        nodes.append(f'{{ type = builtin label = convolver name = {name} config = {{ filename = {f} channel = {c} gain = {g:.17g} }} }}')
         links.append(f'{{ output = "{src}:Out" input = "{name}:In" }}')
         links.append(f'{{ output = "{name}:Out" input = "{dst}:In {port[dst]}" }}')
         port[dst] += 1

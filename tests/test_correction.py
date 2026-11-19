@@ -266,7 +266,7 @@ class ImpulseTests(unittest.TestCase):
 
     def test_true_stereo_combines_magnitudes_at_each_frequency(self):
         gain = self.gain([[1, 0, 1, 0], [1, 0, -1, 0]])
-        self.assertEqual(gain, round(1 / (2 * np.sqrt(2)), 6))
+        self.assertAlmostEqual(gain, 1 / (2 * np.sqrt(2)), places=12)
 
     def test_true_stereo_same_polarities_keep_existing_gain(self):
         self.assertEqual(self.gain([[1, 0, 1, 0], [0, 0, 0, 0]]), 0.5)
@@ -276,6 +276,14 @@ class ImpulseTests(unittest.TestCase):
 
     def test_silent_true_stereo_has_unity_gain(self):
         self.assertEqual(self.gain(np.zeros((2, 4))), 1.0)
+
+    def test_small_gain_does_not_round_to_silence(self):
+        self.assertAlmostEqual(self.gain([[1e7], [0]]), 1e-7, delta=1e-15)
+
+    def test_gain_rounding_does_not_raise_normalized_peak(self):
+        gain = self.gain([[600000], [0]])
+        self.assertLessEqual(gain * 600000, 1.00000001)
+        self.assertGreater(gain, 0)
 
 
 class FilterCapacityTests(unittest.TestCase):

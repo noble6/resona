@@ -254,4 +254,4 @@ def read_ir(path: str) -> dict:
         paths = [x[:, c] for c in range(ch)]
         peak = max(float(np.abs(np.fft.rfft(p, n)).max()) for p in paths)
     return {"path": str(path), "channels": ch, "rate": rate, "frames": len(x),
-            "seconds": round(len(x) / rate, 3), "gain": round(1.0 / peak, 6) if peak > 0 else 1.0}
+            "seconds": round(len(x) / rate, 3), "gain": 1.0 / peak if peak > 0 else 1.0}

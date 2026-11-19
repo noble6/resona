@@ -1,5 +1,6 @@
 """Routing lifecycle tests with no live PipeWire connection."""
 import sys
+import re
 import subprocess
 import unittest
 from pathlib import Path
@@ -55,6 +56,19 @@ class RoutingTests(unittest.TestCase):
                 patch.object(pipeline, "set_default_sink") as set_default:
             self.assertTrue(self.pipe.wait_ready(make_default=False))
         set_default.assert_not_called()
+
+
+class ConvolverConfigTests(unittest.TestCase):
+    def test_gain_keeps_precision_across_config_rendering(self):
+        for gain in (1e-7, 1 / 600000, 0.3535533905932738, 1.0):
+            for channels in (1, 2, 4):
+                with self.subTest(gain=gain, channels=channels):
+                    nodes, _, _ = pipeline._ir_graph(
+                        {"path": "/private/ir.wav", "channels": channels, "gain": gain})
+                    rendered = [float(value) for node in nodes
+                                for value in re.findall(r"\bgain = (\S+)", node)]
+                    self.assertEqual(len(rendered), 4 if channels == 4 else 2)
+                    self.assertEqual(rendered, [gain] * len(rendered))
 
 
 class DefaultOutputTests(unittest.TestCase):
