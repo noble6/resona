@@ -104,7 +104,7 @@ def parse_parametric(text: str) -> tuple[float, list[dict]]:
     preamp = 0.0
     filters = []
     for line in text.splitlines():
-        line = line.strip()
+        line = line.split("#", 1)[0].strip()
         m = re.match(rf"(?i)preamp:\s*({number})\s*db", line)
         if m:
             preamp += float(m.group(1))
@@ -119,7 +119,7 @@ def parse_parametric(text: str) -> tuple[float, list[dict]]:
         fc = re.search(rf"(?i)\bfc\s+({number})\s*(k?)hz", rest)
         gain = re.search(rf"(?i)\bgain\s+({number})\s*db", rest)
         q = re.search(rf"(?i)\bq\s+({number})(?=\s|$|#)", rest)
-        if not q and re.search(r"(?i)\bq\s+", rest.split("#", 1)[0]):
+        if not q and re.search(r"(?i)\bq\s+", rest):
             raise ValueError("invalid filter Q")
         if not fc:
             continue

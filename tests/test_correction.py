@@ -321,6 +321,29 @@ class ParametricNumberTests(unittest.TestCase):
         self.assertEqual(filters[0]["q"], 1)
 
 
+class ParametricCommentTests(unittest.TestCase):
+    def test_inline_comment_cannot_supply_optional_filter_values(self):
+        _, filters = correction.parse_parametric(
+            "Filter: ON HP Fc 100 Hz # Gain 12 dB Q 100")
+        self.assertEqual(filters, [dict(type="HP", freq=100, gain=0, q=0.7071)])
+
+    def test_inline_comment_cannot_supply_required_frequency(self):
+        _, filters = correction.parse_parametric("Filter: ON PK # Fc 1000 Hz Gain 12 dB Q 1")
+        self.assertEqual(filters, [])
+
+    def test_invalid_q_in_comment_does_not_reject_a_valid_filter(self):
+        _, filters = correction.parse_parametric("Filter: ON HP Fc 100 Hz # Q invalid")
+        self.assertEqual(filters, [dict(type="HP", freq=100, gain=0, q=0.7071)])
+
+    def test_comments_and_disabled_filters_do_not_change_values(self):
+        preamp, filters = correction.parse_parametric(
+            "# Preamp: 12 dB\nPreamp: -3 dB # Preamp: 6 dB\n"
+            "Filter: OFF PK Fc 1000 Hz Gain 12 dB Q 1\n"
+            "Filter: ON PK Fc 1000 Hz Gain +6 dB Q +1# Q 2")
+        self.assertEqual(preamp, -3)
+        self.assertEqual(filters, [dict(type="PK", freq=1000, gain=6, q=1)])
+
+
 class FilterCapacityTests(unittest.TestCase):
     def test_ddc_import_respects_dsp_filter_capacity(self):
         filters = correction.parse_vdc("SR_48000:" + ",".join(["1,0,0,0,0"] * 25), 48000)
