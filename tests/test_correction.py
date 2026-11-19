@@ -248,6 +248,35 @@ class ImpulseTests(unittest.TestCase):
                 self.read(struct.pack("<HHIIHH", 3, 1, 48000, 192000, 4, 32),
                           np.array([value, 0], dtype="<f4").tobytes())
 
+    def gain(self, samples):
+        samples = np.asarray(samples, dtype="<f4")
+        channels = samples.shape[1]
+        fmt = struct.pack("<HHIIHH", 3, channels, 48000,
+                          48000 * channels * 4, channels * 4, 32)
+        return self.read(fmt, samples.tobytes())["gain"]
+
+    def test_true_stereo_opposite_polarities_do_not_cancel_gain_estimate(self):
+        self.assertEqual(self.gain([[1, 0, -1, 0], [0, 0, 0, 0]]), 0.5)
+
+    def test_true_stereo_right_output_uses_both_input_paths(self):
+        self.assertEqual(self.gain([[0, 1, 0, -1], [0, 0, 0, 0]]), 0.5)
+
+    def test_true_stereo_delayed_paths_do_not_cancel_gain_estimate(self):
+        self.assertEqual(self.gain([[1, 0, 0, 0], [0, 0, -1, 0]]), 0.5)
+
+    def test_true_stereo_combines_magnitudes_at_each_frequency(self):
+        gain = self.gain([[1, 0, 1, 0], [1, 0, -1, 0]])
+        self.assertEqual(gain, round(1 / (2 * np.sqrt(2)), 6))
+
+    def test_true_stereo_same_polarities_keep_existing_gain(self):
+        self.assertEqual(self.gain([[1, 0, 1, 0], [0, 0, 0, 0]]), 0.5)
+
+    def test_independent_stereo_channels_are_not_summed(self):
+        self.assertEqual(self.gain([[1, -1], [0, 0]]), 1.0)
+
+    def test_silent_true_stereo_has_unity_gain(self):
+        self.assertEqual(self.gain(np.zeros((2, 4))), 1.0)
+
 
 class FilterCapacityTests(unittest.TestCase):
     def test_ddc_import_respects_dsp_filter_capacity(self):

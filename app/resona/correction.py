@@ -247,9 +247,11 @@ def read_ir(path: str) -> dict:
     # gain so the loudest frequency of the (summed) response sits at 0 dB
     n = 1 << int(np.ceil(np.log2(len(x) * 2)))
     if ch == 4:
-        paths = [x[:, 0] + x[:, 2], x[:, 1] + x[:, 3]]
+        # Inputs are independent: add path magnitudes, not signed responses.
+        peak = max(float((np.abs(np.fft.rfft(x[:, c], n)) +
+                          np.abs(np.fft.rfft(x[:, c + 2], n))).max()) for c in (0, 1))
     else:
         paths = [x[:, c] for c in range(ch)]
-    peak = max(float(np.abs(np.fft.rfft(p, n)).max()) for p in paths)
+        peak = max(float(np.abs(np.fft.rfft(p, n)).max()) for p in paths)
     return {"path": str(path), "channels": ch, "rate": rate, "frames": len(x),
             "seconds": round(len(x) / rate, 3), "gain": round(1.0 / peak, 6) if peak > 0 else 1.0}
