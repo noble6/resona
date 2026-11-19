@@ -19,12 +19,27 @@ AUTOEQ_RAW = "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/resu
 CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "resona"
 UA = {"User-Agent": "Resona-sound-engine"}
 MAX_IR_BYTES = 64 * 1024 * 1024
+MAX_AUTOEQ_BYTES = 16 * 1024 * 1024
 
 
 # ---------------------------------------------------------------- AutoEq
 def _get(url: str, timeout: float = 20) -> str:
     with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=timeout) as r:
-        return r.read().decode("utf-8", "replace")
+        declared = r.headers.get("Content-Length")
+        length = None
+        if declared is not None:
+            try:
+                length = int(declared)
+            except ValueError as error:
+                raise OSError("invalid AutoEq response length") from error
+            if length < 0 or length > MAX_AUTOEQ_BYTES:
+                raise OSError("invalid or oversized AutoEq response length")
+        data = r.read(MAX_AUTOEQ_BYTES + 1)
+        if len(data) > MAX_AUTOEQ_BYTES:
+            raise OSError("AutoEq response exceeds 16 MiB")
+        if length is not None and len(data) != length:
+            raise OSError("incomplete AutoEq response")
+        return data.decode("utf-8", "replace")
 
 
 def _parse_autoeq_index(text: str) -> list[dict]:

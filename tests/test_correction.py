@@ -1,5 +1,6 @@
 """Malformed correction-file regressions."""
 from http.client import IncompleteRead
+import io
 import os
 import struct
 import sys
@@ -13,6 +14,64 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 from resona import correction, persistence
+
+
+class AutoEqDownloadTests(unittest.TestCase):
+    def download(self, body, length=None):
+        response = io.BytesIO(body)
+        response.headers = {} if length is None else {"Content-Length": length}
+        with patch.object(correction.urllib.request, "urlopen", return_value=response), \
+                patch.object(response, "read", wraps=response.read) as read, \
+                patch.object(correction, "MAX_AUTOEQ_BYTES", 32):
+            try:
+                return correction._get("https://example.invalid/index")
+            finally:
+                self.assertTrue(response.closed)
+                if read.called:
+                    read.assert_called_once_with(33)
+
+    def test_small_response_with_or_without_length(self):
+        self.assertEqual(self.download(b"index"), "index")
+        self.assertEqual(self.download(b"index", "5"), "index")
+
+    def test_limit_is_inclusive(self):
+        self.assertEqual(self.download(b"x" * 32, "32"), "x" * 32)
+
+    def test_oversized_body_without_length_is_rejected(self):
+        with self.assertRaises(OSError):
+            self.download(b"x" * 33)
+
+    def test_oversized_declared_length_is_rejected(self):
+        with self.assertRaises(OSError):
+            self.download(b"small", "33")
+
+    def test_truncated_body_is_rejected(self):
+        with self.assertRaises(OSError):
+            self.download(b"partial", "20")
+
+    def test_invalid_declared_lengths_are_rejected(self):
+        for length in ("invalid", "-1"):
+            with self.subTest(length=length), self.assertRaises(OSError):
+                self.download(b"index", length)
+
+    def test_invalid_utf8_keeps_existing_replacement_behavior(self):
+        self.assertEqual(self.download(b"\xff"), "\ufffd")
+
+    def test_rejected_responses_keep_valid_stale_cache(self):
+        for body, length in ((b"x" * 33, None), (b"partial", "20")):
+            with self.subTest(length=length), tempfile.TemporaryDirectory() as directory:
+                cache = Path(directory) / "autoeq_index.md"
+                old = "- [Old headphones](./old/path) by Old source\n"
+                cache.write_text(old, encoding="utf-8")
+                response = io.BytesIO(body)
+                response.headers = {} if length is None else {"Content-Length": length}
+                with patch.object(correction, "CACHE_DIR", Path(directory)), \
+                        patch.object(correction, "MAX_AUTOEQ_BYTES", 32), \
+                        patch.object(correction.urllib.request, "urlopen", return_value=response):
+                    entries = correction.autoeq_index(max_age_days=0)
+                self.assertEqual([entry["name"] for entry in entries], ["Old headphones"])
+                self.assertEqual(cache.read_text(encoding="utf-8"), old)
+                self.assertTrue(response.closed)
 
 
 class AutoEqCacheTests(unittest.TestCase):
