@@ -2,6 +2,7 @@
 ViPER DDC (.vdc) biquad files and impulse responses (.wav / .irs) for the convolver."""
 from __future__ import annotations
 
+from http.client import HTTPException
 import os
 import re
 import struct
@@ -11,6 +12,8 @@ import urllib.request
 from pathlib import Path
 
 import numpy as np
+
+from .persistence import atomic_write
 
 AUTOEQ_RAW = "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results"
 CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "resona"
@@ -24,23 +27,36 @@ def _get(url: str, timeout: float = 20) -> str:
         return r.read().decode("utf-8", "replace")
 
 
-def autoeq_index(max_age_days: float = 7) -> list[dict]:
-    """[{name, path, source}] for ~9k headphones. Cached on disk."""
-    cache = CACHE_DIR / "autoeq_index.md"
-    text = None
-    if cache.exists() and time.time() - cache.stat().st_mtime < max_age_days * 86400:
-        text = cache.read_text()
-    if text is None:
-        try:
-            text = _get(f"{AUTOEQ_RAW}/INDEX.md")
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            cache.write_text(text)
-        except OSError:
-            text = cache.read_text() if cache.exists() else ""
+def _parse_autoeq_index(text: str) -> list[dict]:
     out = []
     for m in re.finditer(r"^- \[(.+?)\]\(\./(.+?)\) by (.+?)(?: on (.+))?$", text, re.M):
         out.append({"name": m.group(1), "path": m.group(2), "source": m.group(3) + (f" · {m.group(4)}" if m.group(4) else "")})
     return out
+
+
+def autoeq_index(max_age_days: float = 7) -> list[dict]:
+    """[{name, path, source}] for ~9k headphones. Cached on disk."""
+    cache = CACHE_DIR / "autoeq_index.md"
+    cached, fresh = [], False
+    try:
+        fresh = time.time() - cache.stat().st_mtime < max_age_days * 86400
+        cached = _parse_autoeq_index(cache.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError):
+        pass
+    if cached and fresh:
+        return cached
+    try:
+        text = _get(f"{AUTOEQ_RAW}/INDEX.md")
+    except (OSError, HTTPException):
+        return cached
+    entries = _parse_autoeq_index(text)
+    if not entries:
+        return cached
+    try:
+        atomic_write(cache, text.encode("utf-8"))
+    except OSError:
+        pass  # A cache failure must not discard a usable download.
+    return entries
 
 
 def autoeq_search(index: list[dict], query: str, limit: int = 40) -> list[dict]:
