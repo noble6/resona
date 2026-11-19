@@ -93,7 +93,9 @@ class CorrectionModelTests(unittest.TestCase):
     def test_invalid_import_and_unsupported_ddc_rate_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "profile.txt"
-            for text in ("not an EQ", "Filter: ON PK Fc 1000 Hz Gain 6 dB Q 0", "SR_48000:1,0,0,0,0"):
+            for text in ("not an EQ", "Filter: ON PK Fc 1000 Hz Gain 6 dB Q 0",
+                         "Filter: ON PK Fc 1000 Hz Gain 6 dB Q -1",
+                         "Filter: ON PK Fc 1000 Hz Gain 6 dB Q 1e4", "SR_48000:1,0,0,0,0"):
                 path.write_text(text)
                 with self.assertRaises(ValueError):
                     correction_model.from_file(path, 96000)

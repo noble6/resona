@@ -100,11 +100,12 @@ _TYPE_ALIASES = {"PK": "PK", "PEQ": "PK", "LS": "LSC", "LSC": "LSC", "LSQ": "LSC
 
 def parse_parametric(text: str) -> tuple[float, list[dict]]:
     """Parse EqualizerAPO-style 'Preamp:' and 'Filter n: ON PK Fc X Hz Gain Y dB Q Z' lines."""
+    number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
     preamp = 0.0
     filters = []
     for line in text.splitlines():
         line = line.strip()
-        m = re.match(r"(?i)preamp:\s*(-?[\d.]+)\s*db", line)
+        m = re.match(rf"(?i)preamp:\s*({number})\s*db", line)
         if m:
             preamp += float(m.group(1))
             continue
@@ -115,9 +116,11 @@ def parse_parametric(text: str) -> tuple[float, list[dict]]:
         if not ftype:
             continue
         rest = m.group(3)
-        fc = re.search(r"(?i)fc\s+(-?[\d.]+)\s*(k?)hz", rest)
-        gain = re.search(r"(?i)gain\s+(-?[\d.]+)\s*db", rest)
-        q = re.search(r"(?i)\bq\s+([\d.]+)", rest)
+        fc = re.search(rf"(?i)\bfc\s+({number})\s*(k?)hz", rest)
+        gain = re.search(rf"(?i)\bgain\s+({number})\s*db", rest)
+        q = re.search(rf"(?i)\bq\s+({number})(?=\s|$|#)", rest)
+        if not q and re.search(r"(?i)\bq\s+", rest.split("#", 1)[0]):
+            raise ValueError("invalid filter Q")
         if not fc:
             continue
         f = float(fc.group(1)) * (1000 if fc.group(2) else 1)

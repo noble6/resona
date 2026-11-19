@@ -286,6 +286,41 @@ class ImpulseTests(unittest.TestCase):
         self.assertGreater(gain, 0)
 
 
+class ParametricNumberTests(unittest.TestCase):
+    def test_explicit_plus_signs_are_preserved(self):
+        preamp, filters = correction.parse_parametric(
+            "Preamp: +3 dB\nFilter: ON PK Fc +1000 Hz Gain +6 dB Q +1")
+        self.assertEqual(preamp, 3)
+        self.assertEqual(filters, [dict(type="PK", freq=1000, gain=6, q=1)])
+
+    def test_scientific_notation_is_not_truncated(self):
+        preamp, filters = correction.parse_parametric(
+            "Preamp: -3e0 dB\nFilter: ON PK Fc 1e3 Hz Gain 6e0 dB Q 1e1")
+        self.assertEqual(preamp, -3)
+        self.assertEqual(filters, [dict(type="PK", freq=1000, gain=6, q=10)])
+
+    def test_decimal_forms_and_kilohertz_are_preserved(self):
+        _, filters = correction.parse_parametric("Filter: ON PK Fc +1.5 kHz Gain -.5 dB Q .7")
+        self.assertEqual(filters, [dict(type="PK", freq=1500, gain=-0.5, q=0.7)])
+
+    def test_negative_q_is_not_replaced_with_default(self):
+        _, filters = correction.parse_parametric("Filter: ON PK Fc 1000 Hz Gain 6 dB Q -1")
+        self.assertEqual(filters[0]["q"], -1)
+
+    def test_missing_optional_values_keep_defaults(self):
+        _, filters = correction.parse_parametric("Filter: ON HP Fc 100 Hz")
+        self.assertEqual(filters, [dict(type="HP", freq=100, gain=0, q=0.7071)])
+
+    def test_malformed_q_is_not_replaced_with_default(self):
+        for q in ("1e", "1e-", "nan", "1.2.3"):
+            with self.subTest(q=q), self.assertRaises(ValueError):
+                correction.parse_parametric(f"Filter: ON PK Fc 1000 Hz Gain 6 dB Q {q}")
+
+    def test_q_can_be_followed_by_a_comment(self):
+        _, filters = correction.parse_parametric("Filter: ON PK Fc 1000 Hz Gain 6 dB Q +1#comment")
+        self.assertEqual(filters[0]["q"], 1)
+
+
 class FilterCapacityTests(unittest.TestCase):
     def test_ddc_import_respects_dsp_filter_capacity(self):
         filters = correction.parse_vdc("SR_48000:" + ",".join(["1,0,0,0,0"] * 25), 48000)
