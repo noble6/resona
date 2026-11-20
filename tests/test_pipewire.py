@@ -81,6 +81,10 @@ NEUTRAL = {k: 0 for k in shm.PARAMS}
 NEUTRAL.update(enable=1, eq_on=1, stage_width=1, bass_freq=100, lev_target=-16, lim_on=1, lim_ceil=-0.5,
                amb_size=.4, amb_damp=.5, hrtf_angle=30)
 try:
+    subprocess.run(["pactl", "set-sink-mute", "resona_it_null", "1"], check=True)
+    check(pipeline.sink_volume_db("resona_it_null") == -120, "muted private sink reports silence")
+    subprocess.run(["pactl", "set-sink-mute", "resona_it_null", "0"], check=True)
+    check(pipeline.sink_volume_db("resona_it_null") is not None, "unmuted private sink reports volume")
     state.write(NEUTRAL)
     state.write_corr([])
     ok = fresh(pipe, "resona_it_null")

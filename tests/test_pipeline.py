@@ -71,6 +71,31 @@ class ConvolverConfigTests(unittest.TestCase):
                     self.assertEqual(rendered, [gain] * len(rendered))
 
 
+class SinkVolumeTests(unittest.TestCase):
+    def volume(self, text, mute="Mute: no\n"):
+        with patch.object(pipeline, "_run", side_effect=[text, mute]):
+            return pipeline.sink_volume_db("private_sink")
+
+    def test_muted_sink_reports_silence(self):
+        for mute in ("Mute: yes\n", "mute: yes\n"):
+            with self.subTest(mute=mute):
+                self.assertEqual(self.volume("Volume: front-left: 65536 / 100% / 0.00 dB", mute), -120)
+
+    def test_unmuted_sink_keeps_volume(self):
+        self.assertEqual(self.volume("Volume: front-left: 32768 / 50% / -18.06 dB"), -18.06)
+
+    def test_zero_volume_reports_silence(self):
+        self.assertEqual(self.volume("Volume: front-left: 0 / 0% / -inf dB"), -120)
+
+    def test_missing_or_invalid_mute_response_does_not_claim_unmuted_volume(self):
+        for mute in ("", "unavailable", "Mute: maybe"):
+            with self.subTest(mute=mute):
+                self.assertIsNone(self.volume("Volume: front-left: 65536 / 100% / 0.00 dB", mute))
+
+    def test_failed_volume_query_returns_unknown(self):
+        self.assertIsNone(self.volume(""))
+
+
 class DefaultOutputTests(unittest.TestCase):
     def test_successful_command_reports_success(self):
         with patch.object(pipeline.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:

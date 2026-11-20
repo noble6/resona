@@ -89,8 +89,11 @@ def sink_volume_db(name: str) -> float | None:
     m = re.search(r"(-?inf|-?\d+(?:\.\d+)?) dB", out)
     if not m:
         return None
-    if "mute: yes" in _run("pactl", "get-sink-mute", name):
+    mute = _run("pactl", "get-sink-mute", name).strip().lower()
+    if mute == "mute: yes":
         return -120.0
+    if mute != "mute: no":
+        return None
     return -120.0 if "inf" in m.group(1) else float(m.group(1))
 
 
