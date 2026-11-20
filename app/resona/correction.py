@@ -135,13 +135,12 @@ def parse_vdc(text: str, fs: int) -> list[dict]:
     File order per section: b0 b1 b2 a1 a2 with a1/a2 stored negated (JamesDSP vdc.c)."""
     sections = {}
     for m in re.finditer(r"SR_(\d+)\s*:\s*([-\d.,eE+\s]+)", text):
-        vals = [float(v) for v in m.group(2).replace("\n", "").split(",") if v.strip()]
-        sections[int(m.group(1))] = vals
+        sections[int(m.group(1))] = m.group(2)
     if not sections:
         raise ValueError("no SR_44100 / SR_48000 section found")
     if fs not in sections:
         raise ValueError(f"DDC has no {fs} Hz section")
-    v = sections[fs]
+    v = [float(value) for value in sections[fs].replace("\n", "").split(",") if value.strip()]
     if not v or len(v) % 5:
         raise ValueError("incomplete DDC biquad section")
     out = []

@@ -100,6 +100,22 @@ class CorrectionModelTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     correction_model.from_file(path, 96000)
 
+    def test_malformed_unused_ddc_rate_does_not_block_import_or_restoration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "Headphone.vdc"
+            path.write_text("SR_48000:1,0,0,0,0\nSR_96000:1e,0,0,0,0")
+            info = correction_model.from_file(path, 48000)
+            previous = copy.deepcopy(info)
+            frequencies = np.geomspace(20, 20000, 16)
+            bypass = correction_model.prepare(info, 96000, frequencies, 1)
+            self.assertEqual(bypass.enabled, 0)
+            self.assertEqual(bypass.filters, [])
+            restored = correction_model.prepare(info, 48000, frequencies, 1)
+            self.assertEqual(restored.enabled, 1)
+            self.assertEqual(restored.filters, info["filters"])
+            self.assertEqual(restored.warning, "")
+            self.assertEqual(info, previous)
+
     def test_description_keeps_qml_field_names_and_count_fallback(self):
         self.assertEqual(correction_model.describe(None), dict(name="", source="", kind="", count=0, preamp=0))
         self.assertEqual(correction_model.describe(dict(name="DDC", count=4))["count"], 4)

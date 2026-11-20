@@ -344,6 +344,24 @@ class ParametricCommentTests(unittest.TestCase):
         self.assertEqual(filters, [dict(type="PK", freq=1000, gain=6, q=1)])
 
 
+class DdcSectionTests(unittest.TestCase):
+    def test_unused_malformed_section_does_not_block_selected_rate(self):
+        for sections in (("SR_48000:1,0,0,0,0", "SR_96000:1e,0,0,0,0"),
+                         ("SR_96000:1e,0,0,0,0", "SR_48000:1,0,0,0,0")):
+            with self.subTest(sections=sections):
+                filters = correction.parse_vdc("\n".join(sections), 48000)
+                self.assertEqual(filters[0]["b0"], 1)
+                self.assertEqual(len(filters), 1)
+
+    def test_selected_malformed_section_is_still_rejected(self):
+        with self.assertRaises(ValueError):
+            correction.parse_vdc("SR_48000:1,0,0,0,0\nSR_96000:1e,0,0,0,0", 96000)
+
+    def test_missing_rate_reports_missing_rate_despite_other_malformed_sections(self):
+        with self.assertRaisesRegex(ValueError, "DDC has no 192000 Hz section"):
+            correction.parse_vdc("SR_96000:1e,0,0,0,0", 192000)
+
+
 class FilterCapacityTests(unittest.TestCase):
     def test_ddc_import_respects_dsp_filter_capacity(self):
         filters = correction.parse_vdc("SR_48000:" + ",".join(["1,0,0,0,0"] * 25), 48000)
