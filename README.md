@@ -45,6 +45,16 @@ Windows laptops ship with Dolby Atmos, DTS:X or a Realtek console. Android has D
 | **Limiter** | Lookahead brickwall, linked across all 8 channels. Nothing ever clips |
 | **10-band EQ** | Draggable curve over a live spectrum, plus 14 presets |
 
+### Resona Microphone
+
+A second engine for your voice. Turn it on and apps like Discord, Zoom or OBS pick **Resona Microphone** as their input:
+
+- **Noise suppression** that removes steady fan, hum and hiss noise (about 17 dB in tests) while speech stays within 0.3 dB
+- **Voice clarity** (presence and air, less boom), a **rumble filter**, and **auto level** so whispers and shouts come out equally loud
+- **Voice changer** for fun: Deep, Chipmunk, Robot, Radio, Alien and Cave, with a pitch slider
+- **Test my voice** records a few seconds through the chain and plays them back
+- Plays nicely with your system settings: it only becomes the default input if you want it to, never takes the default back after you pick another mic, follows the mic you choose, hands the default back when you quit, and only opens your real mic while an app is actually recording
+
 ### Knows your hardware
 
 - **Detects every card, codec and connector.** For example: *Realtek ALCS1200A, 24-bit, up to 192 kHz, Line Out connected, S/PDIF available*
@@ -53,6 +63,7 @@ Windows laptops ship with Dolby Atmos, DTS:X or a Realtek console. Android has D
 - **Hi-Res mode**: PipeWire follows each song's native rate (44.1, 88.2, 96, 192 kHz…) instead of resampling everything to 48 kHz
 - **Studio-grade resampler** (quality 14) for every app
 - **Bluetooth codec switching** (LDAC / aptX / AAC / SBC, whatever your adapter offers)
+- **Bluetooth auto-connect**: paired headphones and speakers reconnect as soon as they are on, with backoff so absent devices cost nothing, and a two-minute quiet period after you disconnect one yourself
 
 ### Smart, like a phone
 
@@ -229,7 +240,7 @@ Some of what these suites verify: bit-transparent output with effects neutral; E
 
 ## Shortcuts
 
-`Ctrl+1…7` switch pages · `Space` toggles effects · arrow keys on a focused slider or EQ point for fine steps · double-click an EQ point to zero it
+`Ctrl+1…8` switch pages · `Space` toggles effects · arrow keys on a focused slider or EQ point for fine steps · double-click an EQ point to zero it
 
 ## Contributing
 

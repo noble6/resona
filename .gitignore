@@ -4,3 +4,4 @@ tests/test_dsp
 tests/test_hrtf
 tests/test_shm
 *.pyc
+tests/test_mic

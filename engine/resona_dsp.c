@@ -1077,7 +1077,11 @@ static const LADSPA_Descriptor descriptors[2] = {
     },
 };
 
+/* resona_mic.c; weak so this file still builds alone (tests include it directly) */
+__attribute__((weak)) const LADSPA_Descriptor *resona_mic_descriptor(void);
+
 __attribute__((visibility("default"))) const LADSPA_Descriptor *ladspa_descriptor(unsigned long index)
 {
-    return index < 2 ? &descriptors[index] : NULL;
+    if (index < 2) return &descriptors[index];
+    return index == 2 && resona_mic_descriptor ? resona_mic_descriptor() : NULL;
 }

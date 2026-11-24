@@ -69,6 +69,7 @@ jobs:
           python tests/test_updater.py
           python tests/test_release.py
           python tests/test_sigstore.py
+          python tests/test_bluetooth.py
           python tests/test_install.py
           python tests/test_backend.py
           python tests/test_pipeline.py

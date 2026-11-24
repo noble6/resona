@@ -63,10 +63,12 @@ source tests/pipewire_fixture.sh
 wait_for_test_sink ci_hardware
 wait_for_test_sink ci_other
 pactl set-default-sink ci_hardware
+export RESONA_PRIVATE_PIPEWIRE=1
 
 python3 tests/test_pipewire.py
 python3 tests/test_capture_live.py
 python3 tests/test_routing_live.py
+python3 tests/test_mic_live.py
 python3 tests/test_lifecycle_live.py --soak-seconds "${RESONA_SOAK_SECONDS:-8}"
 
 RESONA_SCREENSHOT="$runtime/screenshots" RESONA_SHM="$runtime/ui-shm" \

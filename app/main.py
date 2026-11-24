@@ -135,7 +135,7 @@ def main() -> int:
     keepalive.start()
 
     if shot_dir:
-        pages = ["home", "eq", "space", "dynamics", "correction", "hardware", "settings"]
+        pages = ["home", "eq", "space", "dynamics", "correction", "hardware", "mic", "settings"]
         win.setHeight(int(os.environ.get("RESONA_SCREENSHOT_HEIGHT", win.height())))
         Path(shot_dir).mkdir(parents=True, exist_ok=True)
 

@@ -17,6 +17,8 @@ from . import __version__, correction, correction_model, hardware, persistence, 
 from .shm import SharedState
 from .desktop import exec_line
 from .updates import UpdateController
+from .bt_control import BluetoothController
+from .mic_control import MicController
 
 AUTOSTART = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "autostart" / "resona.desktop"
 
@@ -133,6 +135,15 @@ class Backend(QObject):
                                          lambda: self._processing, lambda: self._visuals, self)
         self._updates.updateChanged.connect(self.updateChanged)
         self._updates.toast.connect(self.toast)
+
+        self._mic = MicController(self._state, self._async, self._touch, self)
+        self._mic.toast.connect(self.toast)
+        self._bt = BluetoothController(self._state, self._async, self._touch, self)
+        self._bt.toast.connect(self.toast)
+        self._src_timer = QTimer(self, singleShot=True, interval=400, timeout=self._mic.sources_changed)
+        if not os.environ.get("RESONA_SCREENSHOT"):
+            QTimer.singleShot(800, self._mic.begin)
+            QTimer.singleShot(2500, self._bt.begin)
 
     # ------------------------------------------------------------------ helpers
     @Slot(object, object)
@@ -311,9 +322,11 @@ class Backend(QObject):
         self._busy = False
         # stop every timer first: a late animation tick would read the shm after it is unmapped
         self._updates.close()
-        for t in (self._anim, self._watchdog, self._app_timer,
+        for t in (self._anim, self._watchdog, self._app_timer, self._src_timer,
                   self._hw_timer, self._evt_timer, self._vol_timer, self._ir_timer):
             t.stop()
+        self._bt.close()
+        self._mic.close()       # hands the default input back to the real microphone
         if self._auto_base:
             self._restore(self._auto_base)
             self._auto_base = None
@@ -340,6 +353,8 @@ class Backend(QObject):
                 self._hw_timer.start()
             if " on sink-input #" in line and ("'new'" in line or "'remove'" in line):
                 self._app_timer.start()
+            if (" on source #" in line and ("'new'" in line or "'remove'" in line)) or " on server" in line:
+                self._src_timer.start()
 
     def _sync_volume(self):
         if not self._running:
@@ -867,6 +882,7 @@ class Backend(QObject):
 
     def _tick(self):
         self._ticks += 1
+        self._mic.tick(self._visuals)
         if self.shm.sample_rate != self._corr_rate:
             self._push_correction()
             self.stateChanged.emit()
@@ -1065,7 +1081,9 @@ class Backend(QObject):
 
     @Slot(bool)
     def setVisualsActive(self, on: bool):
-        self._visuals = on
+        self._visuals = bool(on)
+        # 30 fps for the analyzer while visible; 4 Hz is plenty to track engine health from the tray
+        self._anim.setInterval(33 if self._visuals else 250)
 
     @Property(bool, notify=stateChanged)
     def reducedMotion(self):
@@ -1097,6 +1115,14 @@ class Backend(QObject):
     @Slot(bool)
     def setUpdateAuto(self, on: bool):
         self._updates.setUpdateAuto(on)
+
+    @Property(QObject, constant=True)
+    def mic(self):
+        return self._mic
+
+    @Property(QObject, constant=True)
+    def bt(self):
+        return self._bt
 
     @Property(str, constant=True)
     def version(self):

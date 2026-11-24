@@ -14,6 +14,8 @@ Window {
     Behavior on color { ColorAnimation { duration: Theme.medium } }
 
     onVisibleChanged: audio.setVisualsActive(visible)
+    // a window started hidden (tray at login) never emits visibleChanged, so report it once
+    Component.onCompleted: audio.setVisualsActive(visible)
     onClosing: (close) => {
         if (closeToTray) { close.accepted = false; win.hide(); audio.setVisualsActive(false) }
     }
@@ -24,7 +26,7 @@ Window {
         current: win.page
         items: [{ icon: "home", label: "Sound" }, { icon: "eq", label: "Equalizer" }, { icon: "space", label: "Space" },
                 { icon: "speed", label: "Dynamics" }, { icon: "hearing", label: "Correct" },
-                { icon: "chip", label: "Hardware" }, { icon: "settings", label: "Settings" }]
+                { icon: "chip", label: "Hardware" }, { icon: "mic", label: "Mic" }, { icon: "settings", label: "Settings" }]
         onPicked: (i) => win.page = i
     }
 
@@ -68,7 +70,8 @@ Window {
         PageSlot { index: 3; DynamicsPage { anchors.fill: parent } }
         PageSlot { index: 4; CorrectionPage { anchors.fill: parent } }
         PageSlot { index: 5; HardwarePage { anchors.fill: parent } }
-        PageSlot { index: 6; SettingsPage { anchors.fill: parent } }
+        PageSlot { index: 6; MicPage { anchors.fill: parent } }
+        PageSlot { index: 7; SettingsPage { anchors.fill: parent } }
     }
 
     // snackbar
@@ -95,5 +98,6 @@ Window {
     Shortcut { sequence: "Ctrl+5"; onActivated: win.page = 4 }
     Shortcut { sequence: "Ctrl+6"; onActivated: win.page = 5 }
     Shortcut { sequence: "Ctrl+7"; onActivated: win.page = 6 }
+    Shortcut { sequence: "Ctrl+8"; onActivated: win.page = 7 }
     Shortcut { sequence: "Space"; onActivated: audio.setEnabled(!audio.params.enable) }
 }

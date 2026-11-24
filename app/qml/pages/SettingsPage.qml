@@ -150,6 +150,95 @@ Page {
         }
     }
 
+    // ---------------------------------------------------- bluetooth audio
+    Card {
+        id: btCard
+        readonly property var b: audio.bt ? audio.bt.info : ({})
+        width: parent.width
+        height: btCol.implicitHeight + 56
+        onVisibleChanged: if (visible) audio.bt.refresh()
+        ColumnLayout {
+            id: btCol
+            anchors.fill: parent; anchors.margins: 28
+            spacing: 12
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 16
+                Icon { name: "bluetooth"; size: 28; color: Theme.primary }
+                Column { Layout.fillWidth: true
+                    Label { text: "Auto-connect Bluetooth audio"; role: "titleL"; emphasized: true }
+                    Label { width: parent.width; wrapMode: Text.WordWrap; role: "body"; color: Theme.inkVariant
+                            text: "Reconnects your paired headphones and speakers as soon as they are on. A device you just disconnected is left alone for two minutes" } }
+                Btn { icon: "reset"; variant: "text"; size: 40; Accessible.name: "Refresh Bluetooth devices"
+                      onClicked: audio.bt.refresh() }
+                M3Switch { checked: btCard.b.auto === true; Accessible.name: "Auto-connect Bluetooth audio"
+                           onToggled: (v) => audio.bt.setAuto(v) }
+            }
+            Rectangle {
+                visible: btCard.b.checked === true && btCard.b.service !== true
+                Layout.fillWidth: true
+                implicitHeight: offCol.implicitHeight + 28; radius: 20
+                color: Theme.surfaceContainerHigh
+                Column {
+                    id: offCol
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    anchors.margins: 18
+                    spacing: 6
+                    Label { text: "The Bluetooth service is not running on this PC"; role: "bodyL"; emphasized: true }
+                    Label { text: "Start it once with this command, then press refresh:"; role: "body"; color: Theme.inkVariant }
+                    TextEdit { text: "sudo systemctl enable --now bluetooth"; readOnly: true; selectByMouse: true
+                               color: Theme.primary; font.family: "monospace"; font.pixelSize: 14 }
+                }
+            }
+            Label {
+                visible: btCard.b.service === true && btCard.b.powered !== true
+                text: "Bluetooth is switched off. Turn it on from your system tray or settings."
+                role: "body"; color: Theme.inkVariant
+            }
+            Label {
+                visible: btCard.b.service === true && btCard.b.powered === true && (btCard.b.devices || []).length === 0
+                text: "No paired headphones or speakers yet. Pair one in your system Bluetooth settings."
+                role: "body"; color: Theme.inkVariant
+            }
+            Repeater {
+                model: btCard.b.devices || []
+                delegate: Rectangle {
+                    id: dev
+                    required property var modelData
+                    Layout.fillWidth: true
+                    height: 64; radius: modelData.connected ? 32 : 16
+                    color: modelData.connected ? Theme.secondaryContainer : Theme.surfaceContainerHigh
+                    Behavior on radius { NumberAnimation { duration: Theme.medium; easing.type: Easing.OutBack } }
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 20; anchors.rightMargin: 12
+                        spacing: 14
+                        Icon { name: (dev.modelData.icon || "").indexOf("headset") >= 0 || (dev.modelData.icon || "").indexOf("headphone") >= 0
+                                     ? "headphones" : "speakers"; size: 24
+                               color: dev.modelData.connected ? Theme.inkSecondaryContainer : Theme.inkVariant }
+                        Column {
+                            Layout.fillWidth: true
+                            Label { text: dev.modelData.name || dev.modelData.address; role: "bodyL"; emphasized: dev.modelData.connected }
+                            Label { text: dev.modelData.busy ? "Connecting…" : (dev.modelData.connected ? "Connected" : "Not connected")
+                                    role: "body"; color: Theme.inkVariant }
+                        }
+                        Label { text: "Auto"; role: "labelL"; color: Theme.inkVariant; opacity: btCard.b.auto ? 1 : 0.4 }
+                        M3Switch { checked: dev.modelData.auto === true; enabled: btCard.b.auto === true
+                                   opacity: enabled ? 1 : 0.4
+                                   Accessible.name: "Auto-connect " + (dev.modelData.name || dev.modelData.address)
+                                   onToggled: (v) => audio.bt.setDeviceAuto(dev.modelData.address, v) }
+                        Btn {
+                            text: dev.modelData.connected ? "Disconnect" : "Connect"
+                            variant: dev.modelData.connected ? "text" : "tonal"; size: 40
+                            enabled: !dev.modelData.busy
+                            onClicked: dev.modelData.connected ? audio.bt.disconnectDevice(dev.modelData.path)
+                                                               : audio.bt.connectDevice(dev.modelData.path)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Card {
         width: parent.width
         height: 260
